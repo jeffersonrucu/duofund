@@ -40,6 +40,26 @@ class User extends Authenticatable
         return [$this->id];
     }
 
+    public function getInitial()
+    {
+        return strtoupper(substr($this->name, 0, 1));
+    }
+
+    public function getFamilyInitials()
+    {
+        if (!$this->family) {
+            return $this->getInitial();
+        }
+
+        $initials = $this->family->users()
+            ->orderBy('name')
+            ->get()
+            ->map(fn(User $user) => $user->getInitial())
+            ->join(' & ');
+
+        return $initials;
+    }
+
     protected static function booted()
     {
         static::created(function ($user) {

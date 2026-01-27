@@ -40,13 +40,20 @@ $generateLink = function() {
                     <i data-lucide="link" class="w-4 h-4 mr-2"></i> Gerar Link de Convite
                 </button>
             @else
-                <div class="flex bg-white/20 p-1 rounded-lg w-full md:w-auto min-w-[275px]">
-                    <input type="text" readonly value="{{ $inviteLink }}" class="bg-transparent text-white text-xs px-2 w-full focus:outline-none truncate font-mono">
-                    <button onclick="navigator.clipboard.writeText('{{ $inviteLink }}'); alert('Link copiado!')" class="bg-white text-violet-600 p-1.5 rounded-md hover:bg-gray-100" title="Copiar">
-                        <i data-lucide="copy" class="w-4 h-4"></i>
-                    </button>
+                <div x-data="{ copied: false }" class="flex flex-col items-end gap-2">
+                    <div class="flex bg-white/20 p-1 rounded-lg w-full md:w-auto min-w-[275px]">
+                        <input type="text" readonly value="{{ $inviteLink }}" class="bg-transparent text-white text-xs px-2 w-full focus:outline-none truncate font-mono">
+                        <button @click="navigator.clipboard.writeText('{{ $inviteLink }}'); copied = true; setTimeout(() => copied = false, 2000); $dispatch('notify', 'Link copiado!')" 
+                            class="bg-white text-violet-600 p-1.5 rounded-md hover:bg-gray-100 transition" title="Copiar">
+                            <i x-show="!copied" data-lucide="copy" class="w-4 h-4"></i>
+                            <i x-show="copied" x-cloak data-lucide="check" class="w-4 h-4 text-green-600"></i>
+                        </button>
+                    </div>
+                    <p class="text-xs text-purple-200">
+                        <i data-lucide="clock" class="w-3 h-3 inline"></i>
+                        Expira em 24 horas. Gere outro se expirar.
+                    </p>
                 </div>
-                <p class="text-xs text-purple-200">Este link expira em 24 horas.</p>
             @endif
         </div>
     </div>

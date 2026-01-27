@@ -28,6 +28,15 @@ class CreateNewUser implements CreatesNewUsers
 
         $familyId = session('invite_family_id');
 
+        if ($familyId) {
+            $family = \App\Models\Family::find($familyId);
+            if ($family && $family->users()->count() >= 2) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'email' => ['Esta família já está completa. Peça um novo link de convite se alguém saiu.'],
+                ]);
+            }
+        }
+
         $user = User::create([
             'name' => $input['name'],
             'email' => $input['email'],

@@ -12,8 +12,11 @@ state([
     'description' => '', 'amount' => '', 'type' => 'expense', 'category' => '',
     'date' => date('Y-m-d'), 'repetition' => 'single', 'installments' => '',
     'scope' => 'personal', 'categories_list' => [],
-    'hasGroupId' => false, // Indica se a transação faz parte de um grupo
-    'editAll' => false     // Checkbox do usuário
+    'hasGroupId' => false,
+    'editAll' => false,
+    'showEditConfirmation' => false,
+    'pendingEditData' => null,
+    'affectedCount' => 0
 ]);
 
 $loadCats = function() {
@@ -29,10 +32,11 @@ $loadCats = function() {
 mount($loadCats);
 on(['category-added' => $loadCats]);
 
-on(['open-new-transaction' => function ($type = 'expense', $scope = 'personal') {
-    $this->reset(['description', 'amount', 'category', 'installments', 'transactionId', 'isEditing', 'hasGroupId', 'editAll']);
+on(['open-new-transaction' => function ($type = 'expense', $scope = 'personal', $date = null) {
+    $this->reset(['description', 'amount', 'category', 'installments', 'transactionId', 'isEditing', 'hasGroupId', 'editAll', 'showEditConfirmation', 'pendingEditData', 'affectedCount']);
     $this->type = $type;
-    $this->date = date('Y-m-d');
+    // Se uma data foi passada (mês selecionado), usa o primeiro dia desse mês, senão usa hoje
+    $this->date = $date ? Carbon::parse($date)->format('Y-m-d') : date('Y-m-d');
     $this->repetition = 'single';
     $this->scope = $scope;
     $this->loadCats();
@@ -48,11 +52,9 @@ on(['edit-transaction' => function($id) {
         $this->type = $tx->type;
         $this->scope = $tx->scope;
         $this->date = $tx->date->format('Y-m-d');
-
-        // Verifica se tem grupo para mostrar a opção de "Editar Todas"
         $this->hasGroupId = !empty($tx->recurring_group_id);
         $this->editAll = false;
-
+        $this->showEditConfirmation = false;
         $this->loadCats();
         $this->category = $tx->category;
         $this->repetition = 'single';
@@ -67,27 +69,43 @@ $save = function () {
     }
 
     $rules = [
-        'description' => 'required',
-        'amount' => 'required|numeric',
-        'type' => 'required',
-        'date' => 'required',
-        'scope' => 'required'
+        'description' => 'required|string|max:255',
+        'amount' => 'required|numeric|min:0.01',
+        'type' => 'required|in:income,expense',
+        'date' => 'required|date',
+        'scope' => 'required|in:personal,shared'
     ];
 
-    if ($this->type === 'expense') {
-        $rules['category'] = 'required';
+    if ($this->repetition === 'installment') {
+        $rules['installments'] = 'required|integer|min:2|max:120';
     }
 
     $this->validate($rules);
 
     if ($this->type === 'income') {
         $this->category = 'Receita';
+    } elseif (empty($this->category)) {
+        $this->category = 'Sem categoria';
+    } else {
+        // Criar categoria automaticamente se não existir
+        $exists = Category::where('name', $this->category)
+            ->where('scope', $this->scope)
+            ->whereIn('user_id', auth()->user()->getFamilyUserIds())
+            ->exists();
+        
+        if (!$exists) {
+            Category::create([
+                'user_id' => auth()->id(),
+                'name' => $this->category,
+                'limit' => 0,
+                'scope' => $this->scope
+            ]);
+        }
     }
 
     $user = auth()->user();
 
     if ($this->isEditing && $this->transactionId) {
-        // --- ATUALIZAÇÃO ---
         $tx = Transaction::find($this->transactionId);
 
         $updateData = [
@@ -98,51 +116,55 @@ $save = function () {
             'scope' => $this->scope
         ];
 
+        if ($this->hasGroupId && $this->editAll && !$this->showEditConfirmation) {
+            $this->affectedCount = Transaction::where('recurring_group_id', $tx->recurring_group_id)->count();
+            $this->pendingEditData = $updateData;
+            $this->showEditConfirmation = true;
+            return;
+        }
+
         if ($this->hasGroupId && $this->editAll) {
-            // Atualiza TODAS do grupo (mantendo as datas originais de cada uma)
-            Transaction::where('recurring_group_id', $tx->recurring_group_id)
-                ->update($updateData);
-
-            // A data, alteramos apenas da atual para não bagunçar o calendário das outras
+            Transaction::where('recurring_group_id', $tx->recurring_group_id)->update($updateData);
             $tx->update(['date' => $this->date]);
-
-            $msg = 'Série atualizada com sucesso!';
+            $msg = "Série atualizada!";
         } else {
-            // Atualiza só esta
             $tx->update(array_merge($updateData, ['date' => $this->date]));
-            $msg = 'Transação atualizada!';
+            $msg = 'Atualizado!';
         }
 
     } else {
-        // --- CRIAÇÃO ---
         $baseDate = Carbon::parse($this->date);
-        $groupId = (string) Str::uuid(); // Gera ID do grupo
-
-        if ($this->type === 'income' && $this->scope === 'shared') {
-            Transaction::create([
-                'user_id' => $user->id,
-                'description' => "Transferência para Conjunto ({$this->category})",
-                'amount' => $this->amount,
-                'type' => 'expense',
-                'category' => 'Transferências',
-                'date' => $this->date,
-                'scope' => 'personal'
-            ]);
-            $this->description = "Aporte de " . $user->name . " - " . $this->description;
-        }
+        $groupId = (string) Str::uuid();
 
         $data = [
-            'user_id' => $user->id, 'description' => $this->description, 'amount' => $this->amount,
-            'type' => $this->type, 'category' => $this->category, 'scope' => $this->scope
+            'user_id' => $user->id, 
+            'description' => $this->description, 
+            'amount' => $this->amount,
+            'type' => $this->type, 
+            'category' => $this->category, 
+            'scope' => $this->scope
         ];
 
         if ($this->repetition === 'single') {
-            Transaction::create(array_merge($data, ['date' => $this->date]));
+            $newTx = Transaction::create(array_merge($data, ['date' => $this->date]));
+
+            // Se for uma receita compartilhada, debita da conta pessoal
+            if ($newTx->scope == 'shared' && $newTx->type == 'income') {
+                Transaction::create([
+                    'user_id' => $user->id,
+                    'description' => 'Transferido para conta conjunta',
+                    'amount' => $newTx->amount,
+                    'type' => 'expense',
+                    'category' => 'Transferência',
+                    'scope' => 'personal',
+                    'date' => $newTx->date
+                ]);
+            }
         }
         elseif ($this->repetition === 'installment') {
             $count = (int) $this->installments;
             for ($i = 0; $i < $count; $i++) {
-                Transaction::create(array_merge($data, [
+                $newTx = Transaction::create(array_merge($data, [
                     'date' => $baseDate->copy()->addMonths($i),
                     'description' => $this->description . " (" . ($i + 1) . "/$count)",
                     'is_installment' => true,
@@ -150,133 +172,267 @@ $save = function () {
                     'installment_count' => $count,
                     'recurring_group_id' => $groupId
                 ]));
+
+                if ($newTx->scope == 'shared' && $newTx->type == 'income') {
+                    Transaction::create([
+                        'user_id' => $user->id,
+                        'description' => 'Transferido para conta conjunta ' . " (" . ($i + 1) . "/$count)",
+                        'amount' => $newTx->amount,
+                        'type' => 'expense',
+                        'category' => 'Transferência',
+                        'scope' => 'personal',
+                        'date' => $newTx->date,
+                        'is_installment' => true,
+                        'installment_current' => $i + 1,
+                        'installment_count' => $count,
+                        'recurring_group_id' => $groupId . '_personal'
+                    ]);
+                }
             }
         }
         elseif ($this->repetition === 'recurring') {
-            // Gera 5 anos de recorrência
             $years = 5;
             $count = $years * 12;
             $curr = $baseDate->copy();
 
             for ($i = 0; $i < $count; $i++) {
-                Transaction::create(array_merge($data, [
+                $newTx = Transaction::create(array_merge($data, [
                     'date' => $curr->format('Y-m-d'),
                     'is_recurring' => true,
                     'recurring_group_id' => $groupId
                 ]));
+
+                if ($newTx->scope == 'shared' && $newTx->type == 'income') {
+                    Transaction::create([
+                        'user_id' => $user->id,
+                        'description' => 'Transferido para conta conjunta',
+                        'amount' => $newTx->amount,
+                        'type' => 'expense',
+                        'category' => 'Transferência',
+                        'scope' => 'personal',
+                        'date' => $newTx->date,
+                        'is_recurring' => true,
+                        'recurring_group_id' => $groupId . '_personal'
+                    ]);
+                }
                 $curr->addMonth();
             }
         }
-        $msg = 'Transação salva!';
+        $msg = 'Salvo!';
     }
 
-    $this->reset(['description', 'amount', 'repetition', 'installments', 'transactionId', 'isEditing', 'hasGroupId', 'editAll']);
+    $this->reset(['description', 'amount', 'repetition', 'installments', 'transactionId', 'isEditing', 'hasGroupId', 'editAll', 'showEditConfirmation', 'pendingEditData', 'affectedCount']);
     $this->dispatch('close-modal-transaction');
-    $this->dispatch('notify', $msg ?? 'Sucesso');
+    $this->dispatch('notify', $msg);
     $this->redirect(request()->header('Referer'), navigate: true);
+};
+
+$confirmBatchEdit = function() {
+    $pendingData = $this->pendingEditData;
+    $txId = $this->transactionId;
+    $dateValue = $this->date;
+    
+    if (!$pendingData || !$txId) {
+        $this->showEditConfirmation = false;
+        return;
+    }
+    
+    $tx = Transaction::find($txId);
+    if (!$tx || !$tx->recurring_group_id) {
+        $this->showEditConfirmation = false;
+        return;
+    }
+    
+    // Aplica a atualização em toda a série
+    Transaction::where('recurring_group_id', $tx->recurring_group_id)->update($pendingData);
+    
+    // Atualiza a data do item atual
+    $tx->update(['date' => $dateValue]);
+    
+    // Limpa os estados
+    $this->showEditConfirmation = false;
+    $this->pendingEditData = null;
+    $this->affectedCount = 0;
+    $this->transactionId = null;
+    $this->isEditing = false;
+    $this->hasGroupId = false;
+    $this->editAll = false;
+    $this->description = '';
+    $this->amount = '';
+    $this->repetition = 'single';
+    $this->installments = '';
+    
+    $this->dispatch('close-modal-transaction');
+    $this->dispatch('notify', 'Série atualizada!');
+    
+    return $this->redirect(request()->header('Referer'), navigate: true);
+};
+
+$cancelBatchEdit = function() {
+    $this->showEditConfirmation = false;
+    $this->pendingEditData = null;
+    $this->affectedCount = 0;
 };
 ?>
 
-<div class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm"
-     :class="{ 'active': transactionModalOpen }" @click="transactionModalOpen = false">
-    <div class="modal-content bg-white w-full max-w-lg p-6 rounded-xl shadow-2xl mx-4 border-t-4 border-primary" @click.stop>
-
-        <div class="flex justify-between items-center mb-4">
-            <h3 class="text-xl font-bold text-gray-800">
-                {{ $isEditing ? 'Editar' : 'Nova' }} {{ $type == 'income' ? 'Receita' : 'Despesa' }}
-            </h3>
-            <button class="text-gray-400 hover:text-gray-600" @click="transactionModalOpen = false"><i data-lucide="x" class="w-6 h-6"></i></button>
+<div>
+    {{-- Modal de Confirmação de Edição em Lote --}}
+    @if($showEditConfirmation)
+    <div class="fixed inset-0 z-[70] flex items-center justify-center bg-gray-900/60 p-4">
+        <div class="bg-white rounded-xl shadow-xl p-4 w-full max-w-xs">
+            <div class="text-center mb-3">
+                <div class="bg-amber-100 text-amber-600 w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                </div>
+                <h3 class="text-sm font-bold text-gray-900">Alterar {{ $affectedCount }} itens?</h3>
+                <p class="text-xs text-gray-500 mt-1">Toda a série será atualizada.</p>
+            </div>
+            <div class="flex gap-2">
+                <button type="button" wire:click="cancelBatchEdit" class="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium text-xs">
+                    Cancelar
+                </button>
+                <button type="button" wire:click="confirmBatchEdit" wire:loading.attr="disabled" class="flex-1 py-2 bg-amber-500 text-white rounded-lg font-medium text-xs disabled:opacity-50">
+                    <span wire:loading.remove wire:target="confirmBatchEdit">Confirmar</span>
+                    <span wire:loading wire:target="confirmBatchEdit">Aguarde...</span>
+                </button>
+            </div>
         </div>
+    </div>
+    @endif
 
-        <form wire:submit="save" class="space-y-4">
-
-            {{-- Escopo --}}
-            <div class="flex p-1 bg-gray-100 rounded-lg">
-                <button type="button" wire:click="$set('scope', 'personal'); $call('loadCats')"
-                    class="flex-1 py-1.5 text-sm font-medium rounded-md transition {{ $scope === 'personal' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700' }}">
-                    👤 Pessoal
-                </button>
-                <button type="button" wire:click="$set('scope', 'shared'); $call('loadCats')"
-                    class="flex-1 py-1.5 text-sm font-medium rounded-md transition {{ $scope === 'shared' ? 'bg-white shadow text-primary' : 'text-gray-500 hover:text-gray-700' }}">
-                    🏠 Compartilhado
+    <div class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 sm:p-4"
+         :class="{ 'active': transactionModalOpen }" @click="transactionModalOpen = false">
+        <div class="modal-content bg-white w-full h-full sm:h-auto sm:max-w-sm sm:rounded-xl shadow-2xl sm:max-h-[85vh] overflow-y-auto" @click.stop>
+            
+            {{-- Header --}}
+            <div class="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex justify-between items-center z-10">
+                <h3 class="text-base font-semibold text-gray-900">
+                    {{ $isEditing ? 'Editar' : ($type == 'income' ? 'Nova Receita' : 'Nova Despesa') }}
+                </h3>
+                <button class="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100" @click="transactionModalOpen = false">
+                    <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
 
-            @if($type === 'income' && $scope === 'shared')
-                <div class="text-xs bg-blue-50 text-blue-700 p-2 rounded border border-blue-100 flex items-start">
-                    <i data-lucide="info" class="w-4 h-4 mr-2 flex-shrink-0"></i>
-                    Isso será registrado como uma Despesa no seu painel Pessoal e uma Receita no Compartilhado.
+            <form wire:submit="save" class="p-4 space-y-3">
+                
+                {{-- Toggle Tipo --}}
+                @if(!$isEditing)
+                <div class="flex bg-gray-100 p-0.5 rounded-lg">
+                    <button type="button" wire:click="$set('type', 'expense')"
+                        class="flex-1 py-2 text-xs font-medium rounded-md transition {{ $type === 'expense' ? 'bg-white shadow text-red-600' : 'text-gray-500' }}">
+                        <i data-lucide="minus-circle" class="w-3.5 h-3.5 inline mr-1"></i> Despesa
+                    </button>
+                    <button type="button" wire:click="$set('type', 'income')"
+                        class="flex-1 py-2 text-xs font-medium rounded-md transition {{ $type === 'income' ? 'bg-white shadow text-green-600' : 'text-gray-500' }}">
+                        <i data-lucide="plus-circle" class="w-3.5 h-3.5 inline mr-1"></i> Receita
+                    </button>
                 </div>
-            @endif
-
-            <div class="grid grid-cols-2 gap-4">
-                <div class="{{ $type === 'income' ? 'col-span-2' : '' }}">
-                    <label class="block text-sm font-medium text-gray-700">Valor (R$)</label>
-                    <input type="text" inputmode="decimal" wire:model="amount" placeholder="0,00" required class="mt-1 block w-full rounded-lg border border-gray-300 p-2 focus:ring-primary focus:border-primary">
-                </div>
-
-                @if($type === 'expense')
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Categoria</label>
-                        <select wire:model="category" required class="mt-1 block w-full rounded-lg border border-gray-300 p-2 focus:ring-primary focus:border-primary">
-                            <option value="">Selecione</option>
-                            @foreach($categories_list as $cat) <option value="{{ $cat }}">{{ $cat }}</option> @endforeach
-                        </select>
-                    </div>
                 @endif
-            </div>
 
-            <div>
-                <label class="block text-sm font-medium text-gray-700">Descrição</label>
-                <input type="text" wire:model="description" placeholder="Ex: Salário, Venda..." class="mt-1 block w-full rounded-lg border border-gray-300 p-2 focus:ring-primary focus:border-primary">
-            </div>
-
-            <div class="grid grid-cols-2 gap-4">
+                {{-- Valor --}}
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Tipo</label>
-                    <select wire:model.live="type" class="mt-1 block w-full rounded-lg border border-gray-300 p-2 focus:ring-primary focus:border-primary">
-                        <option value="expense">Despesa</option>
-                        <option value="income">Receita</option>
-                    </select>
+                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Valor</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+                        <input type="text" inputmode="decimal" wire:model="amount" placeholder="0,00" required 
+                            class="w-full pl-9 pr-3 py-2 text-lg font-bold rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
+                    </div>
+                    @error('amount') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
                 </div>
+
+                {{-- Descrição --}}
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Data {{ $isEditing ? '' : 'Inicial' }}</label>
-                    <input type="date" wire:model="date" required class="mt-1 block w-full rounded-lg border border-gray-300 p-2 focus:ring-primary focus:border-primary">
+                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Descrição</label>
+                    <input type="text" wire:model="description" placeholder="Ex: Mercado, Salário..." required
+                        class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
+                    @error('description') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
                 </div>
-            </div>
 
-            {{-- OPÇÃO DE EDITAR EM LOTE --}}
-            @if($isEditing && $hasGroupId)
-                <div class="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-                    <label class="flex items-center space-x-2 cursor-pointer">
-                        <input type="checkbox" wire:model="editAll" class="rounded text-primary focus:ring-primary border-gray-300 h-4 w-4">
-                        <span class="text-sm text-yellow-800 font-medium">Aplicar alterações para todas as recorrências futuras e passadas?</span>
-                    </label>
-                    <p class="text-xs text-yellow-600 mt-1 ml-6">Isso atualizará valor, descrição e categoria de toda a série.</p>
+                {{-- Categoria --}}
+                @if($type === 'expense')
+                <div>
+                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Categoria</label>
+                    <input type="text" wire:model="category" list="categories-list" placeholder="Digite ou selecione..."
+                        class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
+                    <datalist id="categories-list">
+                        @foreach($categories_list as $cat) 
+                            <option value="{{ $cat }}">
+                        @endforeach
+                    </datalist>
                 </div>
-            @endif
+                @endif
 
-            @if(!$isEditing)
-                <div class="border-t pt-4 mt-2">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Frequência</label>
-                    <div class="flex space-x-4 mb-3">
-                        <label class="flex items-center"><input type="radio" wire:model.live="repetition" value="single" class="text-primary h-4 w-4 border-gray-300"><span class="ml-2 text-sm">Única</span></label>
-                        <label class="flex items-center"><input type="radio" wire:model.live="repetition" value="recurring" class="text-primary h-4 w-4 border-gray-300"><span class="ml-2 text-sm">Todo mês</span></label>
-                        <label class="flex items-center"><input type="radio" wire:model.live="repetition" value="installment" class="text-primary h-4 w-4 border-gray-300"><span class="ml-2 text-sm">Parcelada</span></label>
+                {{-- Data --}}
+                <div>
+                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Data</label>
+                    <input type="date" wire:model="date" required
+                        class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
+                </div>
+
+                {{-- Visibilidade e Repetição --}}
+                @if(!$isEditing)
+                <div class="flex gap-3">
+                    {{-- Escopo --}}
+                    <div class="flex-1">
+                        <label class="block text-[11px] font-medium text-gray-500 mb-1">Visibilidade</label>
+                        <div class="flex bg-gray-100 p-0.5 rounded-lg">
+                            <button type="button" wire:click="$set('scope', 'personal'); $call('loadCats')"
+                                class="flex-1 py-1.5 text-[11px] font-medium rounded transition {{ $scope === 'personal' ? 'bg-white shadow text-gray-800' : 'text-gray-500' }}">
+                                Só eu
+                            </button>
+                            <button type="button" wire:click="$set('scope', 'shared'); $call('loadCats')"
+                                class="flex-1 py-1.5 text-[11px] font-medium rounded transition {{ $scope === 'shared' ? 'bg-white shadow text-purple-600' : 'text-gray-500' }}">
+                                Casal
+                            </button>
+                        </div>
                     </div>
 
-                    @if($repetition === 'installment')
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Número de Parcelas</label>
-                        <input type="number" wire:model="installments" placeholder="Ex: 12" class="block w-full rounded-lg border border-gray-300 p-2 focus:ring-primary focus:border-primary">
-                    @endif
+                    {{-- Frequência --}}
+                    <div class="flex-1">
+                        <label class="block text-[11px] font-medium text-gray-500 mb-1">Repetição</label>
+                        <div class="flex bg-gray-100 p-0.5 rounded-lg">
+                            <button type="button" wire:click="$set('repetition', 'single')"
+                                class="flex-1 py-1.5 text-[11px] font-medium rounded transition {{ $repetition === 'single' ? 'bg-white shadow' : 'text-gray-500' }}">
+                                Única
+                            </button>
+                            <button type="button" wire:click="$set('repetition', 'recurring')"
+                                class="flex-1 py-1.5 text-[11px] font-medium rounded transition {{ $repetition === 'recurring' ? 'bg-white shadow' : 'text-gray-500' }}">
+                                Mensal
+                            </button>
+                            <button type="button" wire:click="$set('repetition', 'installment')"
+                                class="flex-1 py-1.5 text-[11px] font-medium rounded transition {{ $repetition === 'installment' ? 'bg-white shadow' : 'text-gray-500' }}">
+                                Parcelas
+                            </button>
+                        </div>
+                    </div>
                 </div>
-            @endif
 
-            <div class="flex justify-end pt-4">
-                <button type="submit" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-secondary font-medium transition shadow-md">
-                    {{ $isEditing ? 'Atualizar' : 'Salvar' }}
+                @if($repetition === 'installment')
+                <div>
+                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Número de parcelas</label>
+                    <input type="number" wire:model="installments" placeholder="Ex: 12" min="2" max="120" 
+                        class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
+                    @error('installments') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                </div>
+                @endif
+                @endif
+
+                {{-- Editar série --}}
+                @if($isEditing && $hasGroupId)
+                <label class="flex items-center gap-2 p-2.5 bg-amber-50 rounded-lg border border-amber-100 cursor-pointer">
+                    <input type="checkbox" wire:model="editAll" class="rounded text-amber-600 focus:ring-amber-500 border-gray-300 w-3.5 h-3.5">
+                    <span class="text-xs text-amber-800">Aplicar para toda a série</span>
+                </label>
+                @endif
+
+                {{-- Botão --}}
+                <button type="submit" 
+                    class="w-full py-2.5 rounded-lg font-semibold text-sm text-white transition
+                        {{ $type === 'income' ? 'bg-green-600 active:bg-green-700' : 'bg-primary active:bg-blue-700' }}">
+                    {{ $isEditing ? 'Salvar' : 'Adicionar' }}
                 </button>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
 </div>
