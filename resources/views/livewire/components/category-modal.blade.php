@@ -30,10 +30,8 @@ on(['edit-category' => function($id, $name, $limit, $scope) {
 $save = function() {
     $this->validate([
         'name' => 'required|string|max:100',
-        'limit' => 'required|numeric|min:0.01',
+        'limit' => 'nullable|numeric|min:0',
         'scope' => 'required|in:personal,shared'
-    ], [
-        'limit.min' => 'O limite deve ser maior que zero.',
     ]);
 
     if ($this->isEditing && $this->id) {
@@ -44,7 +42,7 @@ $save = function() {
 
             $cat->update([
                 'name' => $this->name,
-                'limit' => $this->limit,
+                'limit' => $this->limit ?: 0,
                 'scope' => $this->scope
             ]);
 
@@ -68,7 +66,7 @@ $save = function() {
         Category::create([
             'user_id' => auth()->id(),
             'name' => $this->name,
-            'limit' => $this->limit,
+            'limit' => $this->limit ?: 0,
             'scope' => $this->scope
         ]);
         $msg = 'Categoria criada!';
@@ -117,8 +115,8 @@ $save = function() {
             </div>
 
             <div>
-                <label class="block text-[11px] font-medium text-gray-500 mb-1">Limite mensal (R$)</label>
-                <input type="number" step="0.01" min="0.01" wire:model="limit" placeholder="1000,00" 
+                <label class="block text-[11px] font-medium text-gray-500 mb-1">Limite mensal (R$) <span class="font-normal text-gray-400">— opcional</span></label>
+                <input type="number" step="0.01" min="0" wire:model="limit" placeholder="0 para sem limite"
                     class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
                 @error('limit') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
             </div>

@@ -8,7 +8,9 @@ layout('components.layouts.app');
 
 state([
     'view' => session('view_mode', 'personal'),
-    'currentMonth' => session('current_month', now()->startOfMonth()->format('Y-m-d'))
+    'currentMonth' => session('current_month', now()->startOfMonth()->format('Y-m-d')),
+    'confirmDeleteId' => null,
+    'confirmDeleteName' => ''
 ])->url();
 
 $data = computed(function() {
@@ -47,24 +49,31 @@ $setView = function ($mode) {
     $this->dispatch('scope-changed', $mode);
 };
 
+$setConfirmDelete = function($id) {
+    $cat = Category::find($id);
+    $this->confirmDeleteId = $id;
+    $this->confirmDeleteName = $cat?->name ?? '';
+};
+
 $deleteCat = function($id) {
     $cat = Category::find($id);
     if($cat && ($cat->user_id === auth()->id() || in_array($cat->user_id, auth()->user()->getFamilyUserIds()))) {
         $cat->delete();
         $this->dispatch('notify', 'Categoria removida.');
     }
+    $this->reset(['confirmDeleteId', 'confirmDeleteName']);
 };
 
-$prevMonth = function() { 
-    $this->currentMonth = Carbon::parse($this->currentMonth)->subMonth()->format('Y-m-d'); 
+$prevMonth = function() {
+    $this->currentMonth = Carbon::parse($this->currentMonth)->subMonth()->format('Y-m-d');
     session(['current_month' => $this->currentMonth]);
 };
-$nextMonth = function() { 
-    $this->currentMonth = Carbon::parse($this->currentMonth)->addMonth()->format('Y-m-d'); 
+$nextMonth = function() {
+    $this->currentMonth = Carbon::parse($this->currentMonth)->addMonth()->format('Y-m-d');
     session(['current_month' => $this->currentMonth]);
 };
-$today = function() { 
-    $this->currentMonth = now()->startOfMonth()->format('Y-m-d'); 
+$today = function() {
+    $this->currentMonth = now()->startOfMonth()->format('Y-m-d');
     session(['current_month' => $this->currentMonth]);
 };
 ?>
@@ -118,7 +127,7 @@ $today = function() {
 
         <div class="hidden md:flex justify-self-end">
             <button @click="categoryModalOpen = true; Livewire.dispatch('open-new-category', { scope: '{{ $view }}' })"
-                class="bg-gray-900 hover:bg-gray-800 text-white font-medium py-2 px-3 rounded-lg shadow items-center transition text-sm flex">
+                class="bg-primary hover:bg-secondary text-white font-medium py-2 px-4 rounded-lg shadow-md shadow-primary/25 items-center transition text-sm flex">
                 <i data-lucide="plus" class="w-4 h-4 mr-1.5"></i> Nova Categoria
             </button>
         </div>
@@ -155,8 +164,8 @@ $today = function() {
                             <span class="text-[10px] font-bold {{ $pctUsed > 100 ? 'text-red-600' : ($pctUsed > 80 ? 'text-yellow-600' : 'text-gray-500') }}">{{ $pctUsed }}%</span>
                         </div>
                         <p class="text-xl sm:text-2xl font-bold text-gray-900">R$ {{ number_format($totalSpent, 2, ',', '.') }}</p>
-                        <div class="w-full bg-red-100 rounded-full h-1.5 mt-1">
-                            <div class="{{ $pctUsed > 100 ? 'bg-red-500' : ($pctUsed > 80 ? 'bg-yellow-500' : 'bg-primary') }} h-1.5 rounded-full transition-all duration-500" style="width: {{ min(100, $pctUsed) }}%"></div>
+                        <div class="w-full bg-red-100 rounded-full h-2 mt-1.5">
+                            <div class="{{ $pctUsed > 100 ? 'bg-red-500' : ($pctUsed > 80 ? 'bg-yellow-500' : 'bg-primary') }} h-2 rounded-full transition-all duration-500" style="width: {{ min(100, $pctUsed) }}%"></div>
                         </div>
                     </div>
                 </div>
@@ -170,8 +179,7 @@ $today = function() {
             @php
                 $used = $this->data['usage'][$cat->name] ?? 0;
                 $hasLimit = $cat->limit > 0;
-                
-                // Se não tem limite, considera o valor gasto como 100%
+
                 if ($hasLimit) {
                     $pct = round(($used / $cat->limit) * 100);
                 } else {
@@ -179,7 +187,6 @@ $today = function() {
                 }
 
                 if (!$hasLimit) {
-                    // Sem limite definido - mostrar em cinza/neutro
                     $barColor = 'bg-gray-400';
                     $textColor = 'text-gray-600';
                     $bgColor = 'bg-gray-50 border-gray-200';
@@ -223,7 +230,7 @@ $today = function() {
                             class="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-blue-500 transition">
                             <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
                         </button>
-                        <button wire:click="deleteCat({{ $cat->id }})" wire:confirm="Excluir a categoria {{ $cat->name }}?"
+                        <button wire:click="setConfirmDelete({{ $cat->id }})"
                             class="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-red-500 transition">
                             <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                         </button>
@@ -241,8 +248,8 @@ $today = function() {
                         @endif
                     </div>
 
-                    <div class="w-full bg-gray-200/50 rounded-full h-2 overflow-hidden">
-                        <div class="{{ $barColor }} h-2 rounded-full transition-all duration-1000 ease-out" style="width: {{ min(100, $pct) }}%"></div>
+                    <div class="w-full bg-gray-200/50 rounded-full h-2.5 overflow-hidden">
+                        <div class="{{ $barColor }} h-2.5 rounded-full transition-all duration-1000 ease-out" style="width: {{ min(100, $pct) }}%"></div>
                     </div>
 
                     <div class="mt-1.5 text-[10px] text-gray-400 flex justify-between">
@@ -280,6 +287,32 @@ $today = function() {
             </button>
         @endif
     </div>
+
+    {{-- Modal de Confirmação de Exclusão --}}
+    @if($confirmDeleteId)
+    <div class="fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4"
+         wire:click="$set('confirmDeleteId', null)">
+        <div class="bg-white rounded-xl shadow-xl p-5 w-full max-w-xs" @click.stop>
+            <div class="text-center mb-4">
+                <div class="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <i data-lucide="trash-2" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-sm font-bold text-gray-900">Excluir categoria?</h3>
+                <p class="text-xs text-gray-500 mt-1 font-medium">{{ $confirmDeleteName }}</p>
+            </div>
+            <div class="flex gap-2">
+                <button wire:click="$set('confirmDeleteId', null)"
+                    class="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-200 transition">
+                    Cancelar
+                </button>
+                <button wire:click="deleteCat({{ $confirmDeleteId }})"
+                    class="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-semibold text-sm hover:bg-red-700 transition">
+                    Excluir
+                </button>
+            </div>
+        </div>
+    </div>
+    @endif
 
     <livewire:components.category-modal />
 </div>

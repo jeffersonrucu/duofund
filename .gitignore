@@ -21,3 +21,7 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+/.claude
+/mcp/node_modules
+# Contém token de produção — manter fora do versionamento
+/CLAUDE.md

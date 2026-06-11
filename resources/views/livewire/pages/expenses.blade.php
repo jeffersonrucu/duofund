@@ -41,7 +41,7 @@ $totals = computed(function() {
     ];
 });
 
-$transactions = computed(function () {
+$baseQuery = function () {
     $user = auth()->user();
     $familyIds = $user->getFamilyUserIds();
     $targetDate = Carbon::parse($this->currentMonth);
@@ -54,10 +54,29 @@ $transactions = computed(function () {
         $query->whereIn('user_id', $familyIds)->where('scope', 'shared');
     }
 
-    $query->whereYear('date', $targetDate->year)
-          ->whereMonth('date', $targetDate->month);
+    return $query->whereYear('date', $targetDate->year)
+                 ->whereMonth('date', $targetDate->month);
+};
 
-    return $query->orderBy('date', 'desc')->paginate(20);
+$lastUpdated = computed(function () {
+    return $this->baseQuery()
+        ->max('updated_at');
+});
+
+$incomes = computed(function () {
+    return $this->baseQuery()
+        ->where('type', 'income')
+        ->orderBy('date', 'desc')
+        ->orderBy('created_at', 'desc')
+        ->get();
+});
+
+$outflows = computed(function () {
+    return $this->baseQuery()
+        ->whereIn('type', ['expense', 'savings'])
+        ->orderBy('date', 'desc')
+        ->orderBy('created_at', 'desc')
+        ->paginate(20);
 });
 
 $setView = function ($mode) {
@@ -169,115 +188,191 @@ $today = function() {
 
         <div class="hidden md:flex justify-self-end">
             <button @click="transactionModalOpen = true; Livewire.dispatch('open-new-transaction', { type: 'expense', scope: '{{ $view }}', date: '{{ $currentMonth }}' })"
-                class="bg-gray-900 hover:bg-gray-800 text-white font-medium py-2 px-3 rounded-lg shadow items-center transition text-sm flex">
+                class="bg-primary hover:bg-secondary text-white font-medium py-2 px-4 rounded-lg shadow-md shadow-primary/25 items-center transition text-sm flex">
                 <i data-lucide="plus" class="w-4 h-4 mr-1.5"></i> Adicionar
             </button>
         </div>
     </div>
 
-    {{-- LISTA DE TRANSAÇÕES --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        {{-- Header com resumo --}}
-        <div class="p-3 sm:p-4 border-b border-gray-100">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-                <div>
-                    <h3 class="font-semibold text-gray-800 text-sm sm:text-base">Histórico de Transações</h3>
-                    <p class="text-[10px] text-gray-400">Todas as movimentações do mês</p>
-                </div>
+    {{-- RESUMO COMPACTO --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-4 grid grid-cols-3 gap-3 divide-x divide-gray-100">
+        <div class="px-2">
+            <p class="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Entradas</p>
+            <p class="text-[11px] sm:text-xs font-bold text-green-600">R$ {{ number_format($this->totals['income'], 2, ',', '.') }}</p>
+        </div>
+        <div class="px-2">
+            <p class="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Saídas</p>
+            <p class="text-[11px] sm:text-xs font-bold text-red-600">R$ {{ number_format($this->totals['expense'], 2, ',', '.') }}</p>
+        </div>
+        <div class="px-2">
+            <p class="text-[9px] text-gray-400 font-medium uppercase tracking-wide">Saldo</p>
+            @php $bal = $this->totals['balance']; @endphp
+            <p class="text-[11px] sm:text-xs font-bold {{ $bal >= 0 ? 'text-blue-600' : 'text-orange-600' }}">R$ {{ number_format($bal, 2, ',', '.') }}</p>
+        </div>
+    </div>
 
-                {{-- Resumo compacto --}}
-                <div class="flex items-center gap-3 text-[11px] sm:text-xs">
-                    <div class="flex items-center gap-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                        <span class="text-gray-500">Entradas:</span>
-                        <span class="font-bold text-green-600">R$ {{ number_format($this->totals['income'], 0, ',', '.') }}</span>
-                    </div>
-                    <div class="flex items-center gap-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-                        <span class="text-gray-500">Saídas:</span>
-                        <span class="font-bold text-red-600">R$ {{ number_format($this->totals['expense'], 0, ',', '.') }}</span>
-                    </div>
-                    @php $bal = $this->totals['balance']; @endphp
-                    <div class="hidden sm:flex items-center gap-1 pl-2 border-l border-gray-200">
-                        <span class="text-gray-500">Saldo:</span>
-                        <span class="font-bold {{ $bal >= 0 ? 'text-blue-600' : 'text-orange-600' }}">
-                            R$ {{ number_format($bal, 0, ',', '.') }}
-                        </span>
-                    </div>
-                </div>
+    {{-- ÚLTIMA ATUALIZAÇÃO --}}
+    @if($this->lastUpdated)
+        @php $updated = \Carbon\Carbon::parse($this->lastUpdated); @endphp
+        <div class="flex items-center justify-center gap-1.5 mb-4 -mt-1 text-[10px] text-gray-400"
+             title="Atualizado em {{ $updated->locale('pt_BR')->isoFormat('D [de] MMMM [de] YYYY [às] HH:mm') }}">
+            <i data-lucide="history" class="w-3 h-3"></i>
+            <span>Atualizado {{ $updated->locale('pt_BR')->diffForHumans() }}</span>
+        </div>
+    @endif
+
+    {{-- ENTRADAS --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-4">
+        <div class="px-3 py-2 border-b border-gray-100 flex items-center justify-between bg-green-50/40">
+            <div class="flex items-center gap-2">
+                <i data-lucide="arrow-up-circle" class="w-3.5 h-3.5 text-green-600"></i>
+                <h3 class="text-[11px] font-bold text-gray-800">Entradas</h3>
+            </div>
+            <div class="flex items-center gap-3 text-[9px]">
+                <span class="text-gray-400">{{ $this->incomes->count() }} {{ $this->incomes->count() == 1 ? 'lançamento' : 'lançamentos' }}</span>
+                <span class="font-bold text-green-600">R$ {{ number_format($this->totals['income'], 2, ',', '.') }}</span>
             </div>
         </div>
 
         <div class="divide-y divide-gray-50">
-            @forelse($this->transactions as $t)
-            <div class="p-3 hover:bg-gray-50 transition group flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                {{-- Lado Esquerdo: Ícone + Descrição --}}
-                <div class="flex items-center gap-3 overflow-hidden">
-                    <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center {{ $t->type == 'income' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600' }}">
-                        <i data-lucide="{{ $t->type == 'income' ? 'arrow-up' : 'arrow-down' }}" class="w-4 h-4"></i>
+            @php $prevDate = null; @endphp
+            @forelse($this->incomes as $t)
+                @php
+                    $txDate = $t->date->format('Y-m-d');
+                    $showDateHeader = $prevDate !== $txDate;
+                    $prevDate = $txDate;
+                @endphp
+                @if($showDateHeader)
+                <div class="px-3 py-1 bg-gray-50/80 border-b border-gray-100">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                        @if($t->date->isToday()) Hoje
+                        @elseif($t->date->isYesterday()) Ontem
+                        @else {{ $t->date->locale('pt_BR')->isoFormat('D [de] MMMM') }}
+                        @endif
+                    </span>
+                </div>
+                @endif
+                <div class="px-3 py-2 hover:bg-gray-50 transition group flex items-center gap-2">
+                    <div class="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center bg-green-50 text-green-600">
+                        <i data-lucide="arrow-up" class="w-3 h-3"></i>
                     </div>
-
-                    <div class="min-w-0 flex-1">
+                    <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-1.5">
-                            <span class="font-medium text-gray-900 text-sm truncate">{{ $t->description }}</span>
-
-                            @if($t->is_installment)
-                                <span class="px-1 py-0.5 bg-yellow-100 text-yellow-800 rounded text-[9px] font-bold">
-                                    {{ $t->installment_current }}/{{ $t->installment_count }}
-                                </span>
-                            @elseif($t->is_recurring)
-                                <span class="px-1 py-0.5 bg-blue-100 text-blue-800 rounded text-[9px]">
-                                    <i data-lucide="repeat" class="w-2.5 h-2.5"></i>
-                                </span>
+                            <span class="text-[11px] font-medium text-gray-900 truncate">{{ preg_replace('/\s*\(\d+\/\d+\)$/', '', $t->description) }}</span>
+                            @if($t->is_recurring)
+                                <i data-lucide="repeat" class="w-2.5 h-2.5 text-blue-400"></i>
                             @endif
-
                             @if($view === 'shared' && $t->user_id !== auth()->id())
-                                <span class="w-4 h-4 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-[9px] font-bold">
+                                <span class="w-3.5 h-3.5 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-[8px] font-bold flex-shrink-0">
                                     {{ substr($t->user->name, 0, 1) }}
                                 </span>
                             @endif
                         </div>
-
-                        <div class="flex items-center text-[10px] text-gray-400 mt-0.5 gap-1.5">
-                            <span>{{ $t->date->format('d/m/Y') }}</span>
-                            <span class="w-0.5 h-0.5 rounded-full bg-gray-300"></span>
+                        <p class="text-[9px] text-gray-400">
                             <span class="bg-gray-100 px-1 py-0.5 rounded text-gray-500">{{ $t->category }}</span>
-                        </div>
+                        </p>
                     </div>
-                </div>
-
-                {{-- Lado Direito: Valor + Ações --}}
-                <div class="flex items-center justify-between sm:justify-end gap-4 pl-11 sm:pl-0">
-                    <span class="text-sm font-bold whitespace-nowrap {{ $t->type == 'income' ? 'text-green-600' : 'text-gray-900' }}">
-                        {{ $t->type == 'income' ? '+' : '-' }} R$ {{ number_format($t->amount, 2, ',', '.') }}
+                    <span class="text-[11px] font-bold whitespace-nowrap text-green-600">
+                        + R$ {{ number_format($t->amount, 2, ',', '.') }}
                     </span>
-
                     <div class="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         <button @click="transactionModalOpen = true; Livewire.dispatch('edit-transaction', { id: {{ $t->id }} })"
                             class="p-1 text-blue-500 hover:bg-blue-50 rounded-md transition">
-                            <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                            <i data-lucide="pencil" class="w-3 h-3"></i>
                         </button>
                         <button wire:click="confirmDelete({{ $t->id }})"
                             class="p-1 text-red-500 hover:bg-red-50 rounded-md transition">
-                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            <i data-lucide="trash-2" class="w-3 h-3"></i>
                         </button>
                     </div>
                 </div>
-            </div>
             @empty
-            <div class="flex flex-col items-center justify-center py-8 text-gray-400">
-                <div class="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-2">
-                    <i data-lucide="calendar-x" class="w-6 h-6 opacity-50"></i>
-                </div>
-                <p class="font-medium text-sm">Nenhum lançamento neste mês.</p>
-                <button wire:click="prevMonth" class="text-xs text-primary hover:underline mt-1">Ver mês anterior</button>
+                <div class="px-3 py-4 text-center text-[11px] text-gray-400">Sem entradas neste mês.</div>
+            @endforelse
+        </div>
+    </div>
+
+    {{-- SAÍDAS --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="px-3 py-2 border-b border-gray-100 flex items-center justify-between bg-red-50/40">
+            <div class="flex items-center gap-2">
+                <i data-lucide="arrow-down-circle" class="w-3.5 h-3.5 text-red-600"></i>
+                <h3 class="text-[11px] font-bold text-gray-800">Saídas</h3>
             </div>
+            <div class="flex items-center gap-3 text-[9px]">
+                <span class="text-gray-400">{{ $this->outflows->total() }} {{ $this->outflows->total() == 1 ? 'lançamento' : 'lançamentos' }}</span>
+                <span class="font-bold text-red-600">R$ {{ number_format($this->totals['expense'], 2, ',', '.') }}</span>
+            </div>
+        </div>
+
+        <div class="divide-y divide-gray-50">
+            @php $prevDate = null; @endphp
+            @forelse($this->outflows as $t)
+                @php
+                    $txDate = $t->date->format('Y-m-d');
+                    $showDateHeader = $prevDate !== $txDate;
+                    $prevDate = $txDate;
+                @endphp
+                @if($showDateHeader)
+                <div class="px-3 py-1 bg-gray-50/80 border-b border-gray-100">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                        @if($t->date->isToday()) Hoje
+                        @elseif($t->date->isYesterday()) Ontem
+                        @else {{ $t->date->locale('pt_BR')->isoFormat('D [de] MMMM') }}
+                        @endif
+                    </span>
+                </div>
+                @endif
+                <div class="px-3 py-2 hover:bg-gray-50 transition group flex items-center gap-2">
+                    <div class="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center {{ $t->type == 'savings' ? 'bg-violet-50 text-violet-600' : 'bg-red-50 text-red-600' }}">
+                        <i data-lucide="{{ $t->type == 'savings' ? 'piggy-bank' : 'arrow-down' }}" class="w-3 h-3"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[11px] font-medium text-gray-900 truncate">{{ preg_replace('/\s*\(\d+\/\d+\)$/', '', $t->description) }}</span>
+                            @if($t->is_installment)
+                                <span class="px-1 py-0 bg-yellow-100 text-yellow-800 rounded text-[9px] font-bold">{{ $t->installment_current }}/{{ $t->installment_count }}</span>
+                            @elseif($t->is_recurring)
+                                <i data-lucide="repeat" class="w-2.5 h-2.5 text-blue-400"></i>
+                            @endif
+                            @if($view === 'shared' && $t->user_id !== auth()->id())
+                                <span class="w-3.5 h-3.5 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-[8px] font-bold flex-shrink-0">
+                                    {{ substr($t->user->name, 0, 1) }}
+                                </span>
+                            @endif
+                        </div>
+                        <p class="text-[9px] text-gray-400">
+                            <span class="bg-gray-100 px-1 py-0.5 rounded text-gray-500">{{ $t->category }}</span>
+                        </p>
+                    </div>
+                    <span class="text-[11px] font-bold whitespace-nowrap {{ $t->type == 'savings' ? 'text-violet-600' : 'text-gray-900' }}">
+                        {{ $t->type == 'savings' ? '' : '-' }} R$ {{ number_format($t->amount, 2, ',', '.') }}
+                    </span>
+                    <div class="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        <button @click="transactionModalOpen = true; Livewire.dispatch('edit-transaction', { id: {{ $t->id }} })"
+                            class="p-1 text-blue-500 hover:bg-blue-50 rounded-md transition">
+                            <i data-lucide="pencil" class="w-3 h-3"></i>
+                        </button>
+                        <button wire:click="confirmDelete({{ $t->id }})"
+                            class="p-1 text-red-500 hover:bg-red-50 rounded-md transition">
+                            <i data-lucide="trash-2" class="w-3 h-3"></i>
+                        </button>
+                    </div>
+                </div>
+            @empty
+                <div class="flex flex-col items-center justify-center py-8 text-gray-400">
+                    <div class="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center mb-2">
+                        <i data-lucide="calendar-x" class="w-5 h-5 opacity-50"></i>
+                    </div>
+                    <p class="font-medium text-[11px]">Nenhuma saída neste mês.</p>
+                    <button wire:click="prevMonth" class="text-[10px] text-primary hover:underline mt-1">Ver mês anterior</button>
+                </div>
             @endforelse
         </div>
 
-        @if($this->transactions->hasPages())
+        @if($this->outflows->hasPages())
             <div class="p-3 border-t border-gray-100 bg-gray-50">
-                {{ $this->transactions->links() }}
+                {{ $this->outflows->links() }}
             </div>
         @endif
     </div>

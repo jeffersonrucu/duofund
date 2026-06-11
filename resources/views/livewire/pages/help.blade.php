@@ -25,6 +25,21 @@ $setSection = function($section) {
         </div>
     </div>
 
+    @php
+        $sections = [
+            'intro'        => ['icon' => 'rocket',           'label' => 'Primeiros Passos'],
+            'dashboard'    => ['icon' => 'layout-dashboard', 'label' => 'Painel Principal'],
+            'transactions' => ['icon' => 'arrow-left-right', 'label' => 'Transações'],
+            'installments' => ['icon' => 'credit-card',      'label' => 'Parcelas'],
+            'budget'       => ['icon' => 'pie-chart',        'label' => 'Orçamento'],
+            'goals'        => ['icon' => 'target',           'label' => 'Metas'],
+            'wishlist'     => ['icon' => 'gift',             'label' => 'Desejos'],
+            'report'       => ['icon' => 'bar-chart-3',      'label' => 'Relatório'],
+            'family'       => ['icon' => 'users',            'label' => 'Finanças a Dois'],
+            'tips'         => ['icon' => 'lightbulb',        'label' => 'Dicas Úteis'],
+        ];
+    @endphp
+
     <div class="flex flex-col lg:flex-row gap-8">
         {{-- SIDEBAR MOBILE --}}
         <div class="lg:hidden">
@@ -33,15 +48,7 @@ $setSection = function($section) {
                 <i data-lucide="chevron-down" class="w-5 h-5 text-gray-400" :class="mobileMenuOpen && 'rotate-180'" style="transition: transform 0.2s"></i>
             </button>
             <div x-show="mobileMenuOpen" x-collapse class="mt-2 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                @foreach([
-                    'intro' => ['icon' => 'rocket', 'label' => 'Primeiros Passos'],
-                    'dashboard' => ['icon' => 'layout-dashboard', 'label' => 'Painel Principal'],
-                    'transactions' => ['icon' => 'arrow-left-right', 'label' => 'Transações'],
-                    'budget' => ['icon' => 'pie-chart', 'label' => 'Orçamento'],
-                    'goals' => ['icon' => 'target', 'label' => 'Metas'],
-                    'family' => ['icon' => 'users', 'label' => 'Finanças a Dois'],
-                    'tips' => ['icon' => 'lightbulb', 'label' => 'Dicas Úteis'],
-                ] as $key => $item)
+                @foreach($sections as $key => $item)
                     <button wire:click="setSection('{{ $key }}')" @click="mobileMenuOpen = false"
                         class="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 transition {{ $activeSection === $key ? 'bg-primary/5 text-primary border-l-2 border-primary' : 'text-gray-600' }}">
                         <i data-lucide="{{ $item['icon'] }}" class="w-4 h-4"></i>
@@ -55,15 +62,7 @@ $setSection = function($section) {
         <aside class="hidden lg:block w-64 flex-shrink-0">
             <nav class="bg-white rounded-xl border border-gray-200 shadow-sm p-2 sticky top-24">
                 <p class="text-xs font-bold text-gray-400 uppercase tracking-wider px-3 py-2">Guia</p>
-                @foreach([
-                    'intro' => ['icon' => 'rocket', 'label' => 'Primeiros Passos'],
-                    'dashboard' => ['icon' => 'layout-dashboard', 'label' => 'Painel Principal'],
-                    'transactions' => ['icon' => 'arrow-left-right', 'label' => 'Transações'],
-                    'budget' => ['icon' => 'pie-chart', 'label' => 'Orçamento'],
-                    'goals' => ['icon' => 'target', 'label' => 'Metas'],
-                    'family' => ['icon' => 'users', 'label' => 'Finanças a Dois'],
-                    'tips' => ['icon' => 'lightbulb', 'label' => 'Dicas Úteis'],
-                ] as $key => $item)
+                @foreach($sections as $key => $item)
                     <button wire:click="setSection('{{ $key }}')"
                         class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition {{ $activeSection === $key ? 'bg-primary text-white shadow-md' : 'text-gray-600 hover:bg-gray-50' }}">
                         <i data-lucide="{{ $item['icon'] }}" class="w-4 h-4"></i>
@@ -290,6 +289,85 @@ $setSection = function($section) {
                             </div>
                         </div>
                     </div>
+
+                    <div class="bg-violet-50 border border-violet-200 rounded-xl p-4">
+                        <div class="flex gap-3">
+                            <i data-lucide="arrow-right-left" class="w-5 h-5 text-violet-600 flex-shrink-0 mt-0.5"></i>
+                            <div>
+                                <h4 class="font-semibold text-violet-900">Receita do casal vira transferência</h4>
+                                <p class="text-sm text-violet-800 mt-1">
+                                    Ao registrar uma <strong>receita</strong> em "Nosso Dinheiro", o DuoFund cria automaticamente
+                                    uma saída de <strong>"Transferido para conta conjunta"</strong> no seu dinheiro pessoal —
+                                    refletindo que o valor saiu da sua conta e entrou na conta do casal.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @endif
+
+            {{-- PARCELAS --}}
+            @if($activeSection === 'installments')
+            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div class="bg-gradient-to-r from-yellow-500 to-amber-600 p-6 text-white">
+                    <h2 class="text-xl font-bold flex items-center gap-2">
+                        <i data-lucide="credit-card" class="w-6 h-6"></i> Parcelas
+                    </h2>
+                    <p class="text-amber-100 mt-2">Acompanhe suas compras parceladas no cartão.</p>
+                </div>
+                <div class="p-6 space-y-6">
+                    <div class="prose prose-sm max-w-none">
+                        <p class="text-gray-600">
+                            Quando você cria uma despesa marcada como <strong>Parcelada</strong>, ela aparece aqui agrupada.
+                            Assim você enxerga tudo que ainda vai pesar no orçamento nos próximos meses.
+                        </p>
+                    </div>
+
+                    <div class="space-y-3">
+                        <h3 class="font-bold text-gray-900">Os três cards do topo</h3>
+                        <div class="flex gap-3 items-start">
+                            <div class="w-3 h-3 rounded-full bg-amber-500 mt-1.5 flex-shrink-0"></div>
+                            <div>
+                                <span class="font-semibold text-gray-900">Parcelas</span>
+                                <p class="text-sm text-gray-600">Quantas parcelas vencem no mês selecionado.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3 items-start">
+                            <div class="w-3 h-3 rounded-full bg-red-500 mt-1.5 flex-shrink-0"></div>
+                            <div>
+                                <span class="font-semibold text-gray-900">Total do Mês</span>
+                                <p class="text-sm text-gray-600">Soma das parcelas que caem neste mês.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3 items-start">
+                            <div class="w-3 h-3 rounded-full bg-orange-500 mt-1.5 flex-shrink-0"></div>
+                            <div>
+                                <span class="font-semibold text-gray-900">Próximo Mês</span>
+                                <p class="text-sm text-gray-600">Quanto você já compromete para o mês seguinte.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="border-gray-100">
+
+                    <div class="space-y-3">
+                        <h3 class="font-bold text-gray-900">Progresso da compra</h3>
+                        <p class="text-gray-600 text-sm">
+                            Cada item mostra o número da parcela atual (ex: <span class="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-bold">3/12</span>)
+                            e quantas já foram pagas, para você saber quanto falta para quitar.
+                        </p>
+                    </div>
+
+                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                        <div class="flex gap-3">
+                            <i data-lucide="plus-circle" class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5"></i>
+                            <p class="text-sm text-amber-800">
+                                <strong>Como adicionar:</strong> use "Novo Parcelamento" e informe o valor total e o número de parcelas.
+                                O DuoFund cria as parcelas dos meses seguintes automaticamente.
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
             @endif
@@ -392,10 +470,11 @@ $setSection = function($section) {
                     <hr class="border-gray-100">
 
                     <div class="space-y-4">
-                        <h3 class="font-bold text-gray-900">Fazendo Depósitos</h3>
+                        <h3 class="font-bold text-gray-900">Reservando e Retirando Valor</h3>
                         <p class="text-gray-600 text-sm">
-                            Clique no botão "Depositar" em qualquer meta para adicionar dinheiro. 
-                            Você pode ver o progresso pela barra e o valor que ainda falta.
+                            Clique em <strong>"Reservar Valor"</strong> em qualquer meta para adicionar dinheiro ao progresso.
+                            Precisou usar o dinheiro? Use <strong>"Retirar Valor"</strong> para diminuir o valor guardado.
+                            A barra mostra o progresso e o quanto ainda falta para o alvo.
                         </p>
                         <div class="bg-green-50 border border-green-200 rounded-xl p-4">
                             <div class="flex gap-3">
@@ -419,6 +498,105 @@ $setSection = function($section) {
                             <div class="p-3 bg-purple-50 rounded-lg border border-purple-100">
                                 <span class="font-semibold text-gray-900">Do Casal</span>
                                 <p class="text-sm text-gray-600 mt-1">Ambos podem ver e contribuir para a meta.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @endif
+
+            {{-- DESEJOS --}}
+            @if($activeSection === 'wishlist')
+            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div class="bg-gradient-to-r from-pink-500 to-rose-500 p-6 text-white">
+                    <h2 class="text-xl font-bold flex items-center gap-2">
+                        <i data-lucide="gift" class="w-6 h-6"></i> Desejos
+                    </h2>
+                    <p class="text-pink-100 mt-2">Sua lista de compras dos sonhos, organizada por prioridade.</p>
+                </div>
+                <div class="p-6 space-y-6">
+                    <div class="prose prose-sm max-w-none">
+                        <p class="text-gray-600">
+                            Anote o que você quer comprar antes de gastar por impulso. Cada item tem preço,
+                            link opcional e uma prioridade para te ajudar a decidir o que vem primeiro.
+                        </p>
+                    </div>
+
+                    <div class="space-y-4">
+                        <h3 class="font-bold text-gray-900">Prioridades</h3>
+                        <div class="grid sm:grid-cols-3 gap-3">
+                            <div class="p-3 bg-red-50 rounded-lg border border-red-100 text-center">
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">Alta</span>
+                                <p class="text-xs text-gray-600 mt-2">Quero muito / preciso logo</p>
+                            </div>
+                            <div class="p-3 bg-amber-50 rounded-lg border border-amber-100 text-center">
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Média</span>
+                                <p class="text-xs text-gray-600 mt-2">Seria bom ter</p>
+                            </div>
+                            <div class="p-3 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Baixa</span>
+                                <p class="text-xs text-gray-600 mt-2">Pode esperar</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="border-gray-100">
+
+                    <div class="space-y-3">
+                        <h3 class="font-bold text-gray-900">Simulador de compra</h3>
+                        <p class="text-gray-600 text-sm">
+                            Antes de comprar, simule o impacto no seu bolso: escolha <strong>à vista</strong> ou
+                            <strong>parcelado</strong> e veja se cabe no orçamento do mês considerando suas entradas e saídas.
+                        </p>
+                    </div>
+
+                    <hr class="border-gray-100">
+
+                    <div class="space-y-3">
+                        <h3 class="font-bold text-gray-900">Marcar como comprado</h3>
+                        <p class="text-gray-600 text-sm">
+                            Comprou? Toque em <strong>"Marcar como comprado"</strong>. O item sai do topo da lista
+                            (que mostra os pendentes primeiro). Mudou de ideia? É só desfazer.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            @endif
+
+            {{-- RELATÓRIO --}}
+            @if($activeSection === 'report')
+            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div class="bg-gradient-to-r from-slate-600 to-gray-800 p-6 text-white">
+                    <h2 class="text-xl font-bold flex items-center gap-2">
+                        <i data-lucide="bar-chart-3" class="w-6 h-6"></i> Relatório
+                    </h2>
+                    <p class="text-gray-300 mt-2">O extrato mensal completo das suas finanças.</p>
+                </div>
+                <div class="p-6 space-y-6">
+                    <div class="prose prose-sm max-w-none">
+                        <p class="text-gray-600">
+                            O relatório reúne todas as entradas e saídas do mês em um só lugar, com os totais de
+                            receitas, despesas, saldo e quantidade de transações no topo.
+                        </p>
+                    </div>
+
+                    <div class="space-y-3">
+                        <h3 class="font-bold text-gray-900">Entradas e Saídas detalhadas</h3>
+                        <p class="text-gray-600 text-sm">
+                            As transações aparecem agrupadas por data, separadas entre entradas e saídas, para você
+                            revisar exatamente para onde o dinheiro foi no mês.
+                        </p>
+                    </div>
+
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                        <div class="flex gap-3">
+                            <i data-lucide="printer" class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"></i>
+                            <div>
+                                <h4 class="font-semibold text-blue-900">Imprimir ou salvar em PDF</h4>
+                                <p class="text-sm text-blue-800 mt-1">
+                                    O botão <strong>"Imprimir"</strong> abre a janela de impressão do navegador —
+                                    de lá você pode imprimir em papel ou escolher "Salvar como PDF".
+                                </p>
                             </div>
                         </div>
                     </div>

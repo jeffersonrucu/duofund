@@ -6,10 +6,16 @@ use Livewire\Volt\Volt;
 use Illuminate\Http\Request;
 use App\Models\Family;
 
-// 1. Rota Raiz
+// 1. Rota Raiz — landing para visitantes, dashboard para logados
 Route::get('/', function () {
-    return redirect()->route('dashboard');
+    if (Auth::check()) {
+        return redirect()->route('dashboard');
+    }
+    return view('welcome');
 })->name('home');
+
+// Política de Privacidade (pública)
+Route::view('/privacidade', 'privacy')->name('privacy');
 
 // --- ROTA DE CONVITE (Pública, mas assinada) ---
 Route::get('/invite/accept/{family}', function (Request $request, Family $family) {
@@ -63,6 +69,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('expenses', 'pages.expenses')->name('expenses');
     Volt::route('budget', 'pages.budget')->name('budget');
     Volt::route('goals', 'pages.goals')->name('goals');
+    Volt::route('wishlist', 'pages.wishlist')->name('wishlist');
+    Volt::route('installments', 'pages.installments')->name('installments');
+    Volt::route('report', 'pages.report')->name('report');
     Volt::route('help', 'pages.help')->name('help');
 
     // --- Rotas de Configuração ---

@@ -12,7 +12,8 @@ state([
     'goal_current' => 0,
     'amount' => '',
     'date' => date('Y-m-d'),
-    'modalOpen' => false
+    'modalOpen' => false,
+    'mode' => 'deposit'
 ]);
 
 on(['open-deposit-modal' => function($id, $name) {
@@ -24,6 +25,21 @@ on(['open-deposit-modal' => function($id, $name) {
         $this->goal_current = $goal->current;
         $this->amount = '';
         $this->date = date('Y-m-d');
+        $this->mode = 'deposit';
+        $this->modalOpen = true;
+    }
+}]);
+
+on(['open-withdraw-modal' => function($id, $name) {
+    $goal = Goal::find($id);
+    if ($goal) {
+        $this->goal_id = $goal->id;
+        $this->goal_name = $goal->name;
+        $this->goal_target = $goal->target;
+        $this->goal_current = $goal->current;
+        $this->amount = '';
+        $this->date = date('Y-m-d');
+        $this->mode = 'withdraw';
         $this->modalOpen = true;
     }
 }]);
@@ -40,27 +56,37 @@ $save = function() {
         return;
     }
 
-    DB::transaction(function() use ($goal) {
-        $goal->increment('current', $this->amount);
+    if ($this->mode === 'withdraw') {
+        $amount = min((float) $this->amount, $goal->current);
+        $goal->decrement('current', $amount);
 
-        $scope = $goal->is_private ? 'personal' : 'shared';
+        $this->modalOpen = false;
+        $this->dispatch('goal-updated');
+        $this->dispatch('notify', 'Valor retirado da meta.');
+    } else {
+        DB::transaction(function() use ($goal) {
+            $goal->increment('current', $this->amount);
 
-        Transaction::create([
-            'user_id' => auth()->id(),
-            'description' => "Reserva para meta: {$this->goal_name}",
-            'amount' => $this->amount,
-            'type' => 'savings',
-            'category' => 'Reserva para Metas',
-            'date' => $this->date,
-            'scope' => $scope,
-            'is_recurring' => false,
-            'is_installment' => false
-        ]);
-    });
+            $scope = $goal->is_private ? 'personal' : 'shared';
 
-    $this->modalOpen = false;
-    $this->dispatch('goal-updated');
-    $this->dispatch('notify', 'Valor reservado para a meta!');
+            Transaction::create([
+                'user_id' => auth()->id(),
+                'description' => "Reserva para meta: {$this->goal_name}",
+                'amount' => $this->amount,
+                'type' => 'savings',
+                'category' => 'Reserva para Metas',
+                'date' => $this->date,
+                'scope' => $scope,
+                'is_recurring' => false,
+                'is_installment' => false
+            ]);
+        });
+
+        $this->modalOpen = false;
+        $this->dispatch('goal-updated');
+        $this->dispatch('notify', 'Valor reservado para a meta!');
+    }
+
     $this->redirect(request()->header('Referer'), navigate: true);
 };
 
@@ -77,7 +103,9 @@ $save = function() {
         <!-- Header -->
         <div class="flex justify-between items-center px-4 py-3 border-b border-gray-100">
             <div>
-                <h3 class="text-base font-semibold text-gray-800">Reservar para Meta</h3>
+                <h3 class="text-base font-semibold text-gray-800">
+                    {{ $mode === 'deposit' ? 'Reservar para Meta' : 'Retirar da Meta' }}
+                </h3>
                 <p class="text-[11px] text-gray-500">{{ $goal_name }}</p>
             </div>
             <button class="text-gray-400 hover:text-gray-600 p-1" wire:click="$set('modalOpen', false)">
@@ -95,24 +123,33 @@ $save = function() {
                         R$ {{ number_format($goal_current, 2, ',', '.') }} / R$ {{ number_format($goal_target, 2, ',', '.') }}
                     </span>
                 </div>
-                @php
-                    $percent = $goal_target > 0 ? min(100, ($goal_current / $goal_target) * 100) : 0;
-                @endphp
-                <div class="w-full bg-gray-200 rounded-full h-1.5">
-                    <div class="bg-green-500 h-1.5 rounded-full transition-all" style="width: {{ $percent }}%"></div>
+                @php $percent = $goal_target > 0 ? min(100, ($goal_current / $goal_target) * 100) : 0; @endphp
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-green-500 h-2 rounded-full transition-all" style="width: {{ $percent }}%"></div>
                 </div>
                 <p class="text-[10px] text-gray-400 mt-1 text-right">{{ number_format($percent, 0) }}% concluído</p>
             </div>
 
             <!-- Valor -->
             <div>
-                <label class="block text-[11px] font-medium text-gray-500 mb-1">Quanto deseja reservar? (R$)</label>
-                <input type="number" step="0.01" min="0.01" wire:model="amount" required
-                    class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-green-500 focus:border-green-500 text-center font-semibold text-green-600"
+                <label class="block text-[11px] font-medium text-gray-500 mb-1">
+                    {{ $mode === 'deposit' ? 'Quanto deseja reservar? (R$)' : 'Quanto deseja retirar? (R$)' }}
+                </label>
+                <input type="number" step="0.01" min="0.01"
+                       @if($mode === 'withdraw') max="{{ $goal_current }}" @endif
+                       wire:model="amount" required
+                    class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 text-center font-semibold
+                        {{ $mode === 'deposit'
+                            ? 'focus:ring-1 focus:ring-green-500 focus:border-green-500 text-green-600'
+                            : 'focus:ring-1 focus:ring-red-500 focus:border-red-500 text-red-600' }}"
                     placeholder="0,00">
                 @error('amount') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                @if($mode === 'withdraw')
+                <p class="text-[10px] text-gray-400 mt-1">Máximo disponível: R$ {{ number_format($goal_current, 2, ',', '.') }}</p>
+                @endif
             </div>
 
+            @if($mode === 'deposit')
             <!-- Data -->
             <div>
                 <label class="block text-[11px] font-medium text-gray-500 mb-1">Data</label>
@@ -120,12 +157,18 @@ $save = function() {
                     class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-green-500 focus:border-green-500">
             </div>
 
-            <!-- Info box -->
             <div class="bg-green-50 p-2.5 rounded-lg text-[10px] text-green-700 border border-green-100">
                 <i data-lucide="piggy-bank" class="w-3 h-3 inline mr-0.5"></i>
                 <strong>Isso é uma reserva, não uma despesa.</strong>
                 <span class="text-green-600 block mt-0.5">O valor será registrado como poupança para esta meta.</span>
             </div>
+            @else
+            <div class="bg-red-50 p-2.5 rounded-lg text-[10px] text-red-700 border border-red-100">
+                <i data-lucide="info" class="w-3 h-3 inline mr-0.5"></i>
+                <strong>Retirada de meta.</strong>
+                <span class="text-red-600 block mt-0.5">O valor será subtraído do progresso. Limite: valor já acumulado.</span>
+            </div>
+            @endif
         </form>
 
         <!-- Footer -->
@@ -135,8 +178,13 @@ $save = function() {
                 Cancelar
             </button>
             <button type="submit" wire:click="save"
-                class="flex-1 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 transition flex items-center justify-center">
-                <i data-lucide="piggy-bank" class="w-4 h-4 mr-1.5"></i> Reservar
+                class="flex-1 py-2.5 text-sm font-semibold text-white rounded-lg transition flex items-center justify-center
+                    {{ $mode === 'deposit' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700' }}">
+                @if($mode === 'deposit')
+                    <i data-lucide="piggy-bank" class="w-4 h-4 mr-1.5"></i> Reservar
+                @else
+                    <i data-lucide="minus-circle" class="w-4 h-4 mr-1.5"></i> Retirar
+                @endif
             </button>
         </div>
     </div>

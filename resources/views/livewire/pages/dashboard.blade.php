@@ -137,11 +137,28 @@ $summary = computed(function() {
 
         <div class="hidden md:flex justify-self-end">
             <button @click="transactionModalOpen = true; Livewire.dispatch('open-new-transaction', { type: 'expense', scope: '{{ $view }}', date: '{{ $currentMonth }}' })"
-                class="bg-gray-900 hover:bg-gray-800 text-white font-medium py-2 px-3 rounded-lg shadow items-center transition text-sm flex">
+                class="bg-primary hover:bg-secondary text-white font-medium py-2 px-4 rounded-lg shadow-md shadow-primary/25 items-center transition text-sm flex">
                 <i data-lucide="plus" class="w-4 h-4 mr-1.5"></i> Adicionar
             </button>
         </div>
     </div>
+
+    @if($view === 'personal' && (!auth()->user()->family || auth()->user()->family->users->count() < 2))
+    <div class="bg-violet-50 border border-violet-100 rounded-xl p-3 mb-4 sm:mb-6 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 bg-violet-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <i data-lucide="heart-handshake" class="w-4 h-4 text-violet-600"></i>
+            </div>
+            <div>
+                <p class="text-sm font-medium text-violet-900">Gerencie finanças com seu(sua) parceiro(a)</p>
+                <p class="text-[11px] text-violet-500">Convide e registrem juntos</p>
+            </div>
+        </div>
+        <button wire:click="setView('shared')" class="text-xs font-semibold text-violet-700 bg-white border border-violet-200 px-3 py-1.5 rounded-lg hover:bg-violet-50 transition flex-shrink-0">
+            Convidar
+        </button>
+    </div>
+    @endif
 
     @if ($view === 'shared')
         @if(auth()->user()->family?->users()->count() < 2)
@@ -179,7 +196,7 @@ $summary = computed(function() {
                 <p class="text-green-800 text-[11px] font-medium mb-0.5 flex items-center">
                     <span class="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5"></span> Entradas
                 </p>
-                <h3 class="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight">
+                <h3 class="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
                     R$ {{ number_format($this->summary['income'], 2, ',', '.') }}
                 </h3>
             </div>
@@ -199,14 +216,14 @@ $summary = computed(function() {
                         {{ $this->summary['pctUsed'] }}%
                     </span>
                 </div>
-                <h3 class="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight">
+                <h3 class="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
                     R$ {{ number_format($this->summary['expense'], 2, ',', '.') }}
                 </h3>
                 <p class="text-[10px] text-gray-500 mt-1">
                     Meta: R$ {{ number_format($this->summary['budgetTotal'], 2, ',', '.') }}
                 </p>
-                <div class="w-full bg-red-100 rounded-full h-1 mt-1">
-                    <div class="bg-red-500 h-1 rounded-full transition-all duration-500" style="width: {{ $this->summary['pctUsed'] }}%"></div>
+                <div class="w-full bg-red-100 rounded-full h-2 mt-1.5">
+                    <div class="bg-red-500 h-2 rounded-full transition-all duration-500" style="width: {{ $this->summary['pctUsed'] }}%"></div>
                 </div>
             </div>
         </div>
@@ -228,7 +245,7 @@ $summary = computed(function() {
                 <p class="{{ $text }} text-[11px] font-medium mb-0.5 flex items-center">
                     <i data-lucide="{{ $icon }}" class="w-3 h-3 mr-1"></i> Resultado
                 </p>
-                <h3 class="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight">
+                <h3 class="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
                     R$ {{ number_format($result, 2, ',', '.') }}
                 </h3>
                 <p class="text-[10px] {{ $subtext }} mt-1 font-medium">
@@ -301,8 +318,8 @@ $summary = computed(function() {
                             @endif
                         </div>
                     </div>
-                    <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                        <div class="{{ $barColor }} h-1.5 rounded-full transition-all duration-700 ease-out" style="width: {{ $catPct }}%"></div>
+                    <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                        <div class="{{ $barColor }} h-2 rounded-full transition-all duration-700 ease-out" style="width: {{ $catPct }}%"></div>
                     </div>
                 </div>
             @empty
@@ -326,8 +343,8 @@ $summary = computed(function() {
                 @forelse($this->summary['recent'] as $t)
                     <div class="flex items-center justify-between group p-2 hover:bg-gray-50 rounded-lg transition border border-transparent hover:border-gray-100">
                         <div class="flex items-center overflow-hidden">
-                            <div class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center mr-2 {{ $t->type == 'income' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600' }}">
-                                <i data-lucide="{{ $t->type == 'income' ? 'arrow-up' : 'arrow-down' }}" class="w-3.5 h-3.5"></i>
+                            <div class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center mr-2 {{ $t->type == 'income' ? 'bg-green-100 text-green-600' : ($t->type == 'savings' ? 'bg-violet-100 text-violet-600' : 'bg-red-100 text-red-600') }}">
+                                <i data-lucide="{{ $t->type == 'income' ? 'arrow-up' : ($t->type == 'savings' ? 'piggy-bank' : 'arrow-down') }}" class="w-3.5 h-3.5"></i>
                             </div>
                             <div class="min-w-0">
                                 <p class="text-xs font-medium text-gray-900 truncate">{{ $t->description }}</p>
@@ -341,8 +358,8 @@ $summary = computed(function() {
                                 </p>
                             </div>
                         </div>
-                        <span class="text-xs font-bold whitespace-nowrap {{ $t->type == 'income' ? 'text-green-600' : 'text-gray-900' }}">
-                            {{ $t->type == 'income' ? '+' : '-' }}{{ number_format($t->amount, 0, ',', '.') }}
+                        <span class="text-xs font-bold whitespace-nowrap {{ $t->type == 'income' ? 'text-green-600' : ($t->type == 'savings' ? 'text-violet-600' : 'text-gray-900') }}">
+                            {{ $t->type == 'income' ? '+' : ($t->type == 'savings' ? '' : '-') }}{{ number_format($t->amount, 0, ',', '.') }}
                         </span>
                     </div>
                 @empty

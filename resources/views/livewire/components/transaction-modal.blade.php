@@ -10,7 +10,7 @@ state([
     'transactionId' => null,
     'isEditing' => false,
     'description' => '', 'amount' => '', 'type' => 'expense', 'category' => '',
-    'date' => date('Y-m-d'), 'repetition' => 'single', 'installments' => '',
+    'date' => date('Y-m-d'), 'repetition' => 'single', 'installments' => '', 'installments_paid' => 0,
     'scope' => 'personal', 'categories_list' => [],
     'hasGroupId' => false,
     'editAll' => false,
@@ -32,12 +32,11 @@ $loadCats = function() {
 mount($loadCats);
 on(['category-added' => $loadCats]);
 
-on(['open-new-transaction' => function ($type = 'expense', $scope = 'personal', $date = null) {
-    $this->reset(['description', 'amount', 'category', 'installments', 'transactionId', 'isEditing', 'hasGroupId', 'editAll', 'showEditConfirmation', 'pendingEditData', 'affectedCount']);
+on(['open-new-transaction' => function ($type = 'expense', $scope = 'personal', $date = null, $repetition = 'single') {
+    $this->reset(['description', 'amount', 'category', 'installments', 'installments_paid', 'transactionId', 'isEditing', 'hasGroupId', 'editAll', 'showEditConfirmation', 'pendingEditData', 'affectedCount']);
     $this->type = $type;
-    // Se uma data foi passada (mês selecionado), usa o primeiro dia desse mês, senão usa hoje
     $this->date = $date ? Carbon::parse($date)->format('Y-m-d') : date('Y-m-d');
-    $this->repetition = 'single';
+    $this->repetition = $repetition;
     $this->scope = $scope;
     $this->loadCats();
 }]);
@@ -78,6 +77,7 @@ $save = function () {
 
     if ($this->repetition === 'installment') {
         $rules['installments'] = 'required|integer|min:2|max:120';
+        $rules['installments_paid'] = 'required|integer|min:0';
     }
 
     $this->validate($rules);
@@ -163,10 +163,12 @@ $save = function () {
         }
         elseif ($this->repetition === 'installment') {
             $count = (int) $this->installments;
+            $paid  = max(0, min((int) $this->installments_paid, $count - 1));
+            $baseDate = $baseDate->subMonths($paid);
             for ($i = 0; $i < $count; $i++) {
                 $newTx = Transaction::create(array_merge($data, [
                     'date' => $baseDate->copy()->addMonths($i),
-                    'description' => $this->description . " (" . ($i + 1) . "/$count)",
+                    'description' => $this->description,
                     'is_installment' => true,
                     'installment_current' => $i + 1,
                     'installment_count' => $count,
@@ -221,7 +223,7 @@ $save = function () {
         $msg = 'Salvo!';
     }
 
-    $this->reset(['description', 'amount', 'repetition', 'installments', 'transactionId', 'isEditing', 'hasGroupId', 'editAll', 'showEditConfirmation', 'pendingEditData', 'affectedCount']);
+    $this->reset(['description', 'amount', 'repetition', 'installments', 'installments_paid', 'transactionId', 'isEditing', 'hasGroupId', 'editAll', 'showEditConfirmation', 'pendingEditData', 'affectedCount']);
     $this->dispatch('close-modal-transaction');
     $this->dispatch('notify', $msg);
     $this->redirect(request()->header('Referer'), navigate: true);
@@ -261,6 +263,7 @@ $confirmBatchEdit = function() {
     $this->amount = '';
     $this->repetition = 'single';
     $this->installments = '';
+    $this->installments_paid = 0;
     
     $this->dispatch('close-modal-transaction');
     $this->dispatch('notify', 'Série atualizada!');
@@ -408,12 +411,40 @@ $cancelBatchEdit = function() {
                     </div>
                 </div>
 
+                @if($repetition === 'recurring')
+                <div class="flex items-start gap-2 p-2.5 bg-blue-50 rounded-lg text-[11px] text-blue-700 border border-blue-100">
+                    <i data-lucide="info" class="w-3.5 h-3.5 flex-shrink-0 mt-0.5"></i>
+                    <span>Serão criados lançamentos mensais para os <strong>próximos 5 anos</strong> (60 meses). Exclua individualmente quando necessário.</span>
+                </div>
+                @endif
+
                 @if($repetition === 'installment')
-                <div>
-                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Número de parcelas</label>
-                    <input type="number" wire:model="installments" placeholder="Ex: 12" min="2" max="120" 
-                        class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
-                    @error('installments') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                <div class="flex gap-3">
+                    <div class="flex-1">
+                        <label class="block text-[11px] font-medium text-gray-500 mb-1">Total de parcelas</label>
+                        <input type="number" wire:model="installments" placeholder="Ex: 12" min="2" max="120"
+                            class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
+                        @error('installments') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-[11px] font-medium text-gray-500 mb-1">Já pagas</label>
+                        <input type="number" wire:model="installments_paid" placeholder="0" min="0"
+                            class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
+                        @error('installments_paid') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                    </div>
+                </div>
+                @if($installments_paid > 0)
+                <div class="flex items-start gap-2 p-2.5 bg-amber-50 rounded-lg text-[11px] text-amber-800 border border-amber-100">
+                    <i data-lucide="info" class="w-3.5 h-3.5 flex-shrink-0 mt-0.5"></i>
+                    <span>A data da 1ª parcela será ajustada para <strong>{{ $installments_paid }} {{ $installments_paid == 1 ? 'mês' : 'meses' }} atrás</strong>.</span>
+                </div>
+                @endif
+                @endif
+
+                @if($type === 'income' && $scope === 'shared')
+                <div class="flex items-start gap-2 p-2.5 bg-amber-50 rounded-lg text-[11px] text-amber-800 border border-amber-200">
+                    <i data-lucide="info" class="w-3.5 h-3.5 flex-shrink-0 mt-0.5"></i>
+                    <span>Uma despesa equivalente será registrada em <strong>Meu Dinheiro</strong> como "Transferência para conta conjunta".</span>
                 </div>
                 @endif
                 @endif
