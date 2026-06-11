@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>DuoFund - Finanças a Dois</title>
+    @include('partials.favicon')
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -124,19 +125,58 @@
                    title="Como usar o DuoFund">
                     <i data-lucide="help-circle" class="w-5 h-5"></i>
                 </a>
-                <div class="flex -space-x-2">
-                    @if(auth()->user()->family)
-                        @foreach(auth()->user()->family->users as $member)
-                            <div class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs ring-2 ring-white shadow-sm {{ $member->id === auth()->id() ? 'bg-primary' : 'bg-purple-500' }}"
-                                 title="{{ $member->name }}">
-                                {{ substr($member->name, 0, 1) }}
-                            </div>
-                        @endforeach
-                    @else
-                        <div class="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white font-bold text-xs ring-2 ring-white shadow-sm">
-                            {{ substr(auth()->user()->name ?? 'U', 0, 1) }}
+                {{-- Menu do usuário --}}
+                <div class="relative" x-data="{ userMenu: false }" @keydown.escape.window="userMenu = false">
+                    <button @click="userMenu = !userMenu"
+                            class="flex items-center gap-1.5 rounded-full p-0.5 pr-1.5 transition hover:bg-gray-50"
+                            :class="userMenu && 'bg-gray-50'" aria-label="Menu do usuário">
+                        <div class="flex -space-x-2">
+                            @if(auth()->user()->family)
+                                @foreach(auth()->user()->family->users as $member)
+                                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs ring-2 ring-white shadow-sm {{ $member->id === auth()->id() ? 'bg-primary' : 'bg-purple-500' }}"
+                                         title="{{ $member->name }}">
+                                        {{ substr($member->name, 0, 1) }}
+                                    </div>
+                                @endforeach
+                            @else
+                                <div class="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white font-bold text-xs ring-2 ring-white shadow-sm">
+                                    {{ substr(auth()->user()->name ?? 'U', 0, 1) }}
+                                </div>
+                            @endif
                         </div>
-                    @endif
+                        <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400 transition-transform" :class="userMenu && 'rotate-180'"></i>
+                    </button>
+
+                    <div x-show="userMenu" x-cloak @click.away="userMenu = false"
+                         x-transition:enter="transition ease-out duration-150"
+                         x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0"
+                         x-transition:leave="transition ease-in duration-100"
+                         x-transition:leave-start="opacity-100 translate-y-0" x-transition:leave-end="opacity-0 translate-y-1"
+                         class="absolute right-0 mt-2 w-56 origin-top-right rounded-xl border border-gray-100 bg-white py-1.5 shadow-xl shadow-gray-200/60 z-50">
+                        <div class="px-3.5 py-2 border-b border-gray-100">
+                            <p class="text-sm font-semibold text-gray-900 truncate">{{ auth()->user()->name }}</p>
+                            <p class="text-xs text-gray-400 truncate">{{ auth()->user()->email }}</p>
+                        </div>
+
+                        <a href="{{ route('home') }}"
+                           class="flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-600 transition hover:bg-gray-50 hover:text-primary">
+                            <i data-lucide="globe" class="w-4 h-4"></i> Ver site
+                        </a>
+                        <a href="{{ route('profile.edit') }}" wire:navigate
+                           class="flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-600 transition hover:bg-gray-50 hover:text-primary">
+                            <i data-lucide="settings" class="w-4 h-4"></i> Configurações
+                        </a>
+
+                        <div class="my-1 border-t border-gray-100"></div>
+
+                        <form method="POST" action="{{ route('logout') }}">
+                            @csrf
+                            <button type="submit"
+                                    class="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-sm text-red-600 transition hover:bg-red-50">
+                                <i data-lucide="log-out" class="w-4 h-4"></i> Sair da conta
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
@@ -272,6 +312,8 @@
             <p class="mt-4 text-sm font-medium text-gray-500">Carregando...</p>
         </div>
     </div>
+
+    @include('partials.install-pwa', ['offset' => 'bottom-24'])
 
     <livewire:components.transaction-modal />
     <livewire:components.category-modal />

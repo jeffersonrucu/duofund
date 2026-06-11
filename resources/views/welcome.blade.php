@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>DuoFund — Finanças a dois, sem complicação</title>
     <meta name="description" content="O app de finanças para casais. Organizem juntos o dinheiro de vocês — com transparência sobre o que é seu e o que é compartilhado.">
+    @include('partials.favicon')
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -64,11 +65,18 @@
             </div>
 
             <div class="flex items-center gap-2.5">
-                <a href="{{ route('login') }}" class="hidden rounded-lg px-4 py-2 text-sm font-semibold text-gray-600 transition hover:text-primary sm:inline-block">Entrar</a>
-                <a href="{{ route('register') }}"
-                   class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md shadow-primary/25 transition hover:bg-secondary">
-                    Criar conta
-                </a>
+                @auth
+                    <a href="{{ route('dashboard') }}"
+                       class="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md shadow-primary/25 transition hover:bg-secondary">
+                        Ir para o painel <i data-lucide="arrow-right" class="h-4 w-4"></i>
+                    </a>
+                @else
+                    <a href="{{ route('login') }}" class="hidden rounded-lg px-4 py-2 text-sm font-semibold text-gray-600 transition hover:text-primary sm:inline-block">Entrar</a>
+                    <a href="{{ route('register') }}"
+                       class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md shadow-primary/25 transition hover:bg-secondary">
+                        Criar conta
+                    </a>
+                @endauth
                 <button @click="open = !open" class="md:hidden p-2 text-gray-600" aria-label="Menu">
                     <i x-show="!open" data-lucide="menu" class="h-5 w-5"></i>
                     <i x-show="open" x-cloak data-lucide="x" class="h-5 w-5"></i>
@@ -82,7 +90,11 @@
                 <a href="#recursos" @click="open=false" class="py-2.5 text-sm font-medium text-gray-600">Recursos</a>
                 <a href="#como-funciona" @click="open=false" class="py-2.5 text-sm font-medium text-gray-600">Como funciona</a>
                 <a href="#conceito" @click="open=false" class="py-2.5 text-sm font-medium text-gray-600">Pessoal vs. Casal</a>
-                <a href="{{ route('login') }}" class="mt-1 py-2.5 text-sm font-semibold text-primary">Entrar →</a>
+                @auth
+                    <a href="{{ route('dashboard') }}" class="mt-1 py-2.5 text-sm font-semibold text-primary">Ir para o painel →</a>
+                @else
+                    <a href="{{ route('login') }}" class="mt-1 py-2.5 text-sm font-semibold text-primary">Entrar →</a>
+                @endauth
             </div>
         </div>
     </header>
@@ -112,9 +124,9 @@
                 </p>
 
                 <div class="rise mt-8 flex flex-col gap-3 sm:flex-row" style="animation-delay:.35s">
-                    <a href="{{ route('register') }}"
+                    <a href="{{ auth()->check() ? route('dashboard') : route('register') }}"
                        class="group flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-primary/30 transition hover:bg-secondary hover:shadow-primary/40 active:scale-[.99]">
-                        Começar de graça
+                        {{ auth()->check() ? 'Ir para o painel' : 'Começar de graça' }}
                         <i data-lucide="arrow-right" class="h-4 w-4 transition-transform group-hover:translate-x-0.5"></i>
                     </a>
                     <a href="#como-funciona"
@@ -290,9 +302,9 @@
                 </div>
                 <h2 class="font-display text-4xl font-600 tracking-tight text-white sm:text-5xl">Prontos para começar juntos?</h2>
                 <p class="mx-auto mt-4 max-w-md text-gray-400">Criem a conta de vocês e deixem a planilha de lado de uma vez.</p>
-                <a href="{{ route('register') }}"
+                <a href="{{ auth()->check() ? route('dashboard') : route('register') }}"
                    class="group mt-8 inline-flex items-center justify-center gap-2 rounded-xl bg-white px-7 py-3.5 text-sm font-semibold text-gray-900 shadow-lg transition hover:bg-gray-100 active:scale-[.99]">
-                    Criar conta grátis
+                    {{ auth()->check() ? 'Ir para o painel' : 'Criar conta grátis' }}
                     <i data-lucide="arrow-right" class="h-4 w-4 transition-transform group-hover:translate-x-0.5"></i>
                 </a>
             </div>
@@ -309,11 +321,17 @@
             <p class="text-xs text-gray-400">© {{ date('Y') }} DuoFund · Gerenciando finanças juntos.</p>
             <div class="flex items-center gap-5 text-sm font-medium text-gray-500">
                 <a href="{{ route('privacy') }}" class="transition hover:text-primary">Privacidade</a>
-                <a href="{{ route('login') }}" class="transition hover:text-primary">Entrar</a>
-                <a href="{{ route('register') }}" class="transition hover:text-primary">Criar conta</a>
+                @auth
+                    <a href="{{ route('dashboard') }}" class="transition hover:text-primary">Painel</a>
+                @else
+                    <a href="{{ route('login') }}" class="transition hover:text-primary">Entrar</a>
+                    <a href="{{ route('register') }}" class="transition hover:text-primary">Criar conta</a>
+                @endauth
             </div>
         </div>
     </footer>
+
+    @include('partials.install-pwa', ['offset' => 'bottom-4'])
 
     <script>
         // Lucide antes do Alpine (defer), para preservar x-show/@click nos <svg>

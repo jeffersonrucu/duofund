@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Política de Privacidade — DuoFund</title>
     <meta name="description" content="Como o DuoFund coleta, usa e protege os dados financeiros do casal.">
+    @include('partials.favicon')
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>

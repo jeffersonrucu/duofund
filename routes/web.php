@@ -6,13 +6,8 @@ use Livewire\Volt\Volt;
 use Illuminate\Http\Request;
 use App\Models\Family;
 
-// 1. Rota Raiz — landing para visitantes, dashboard para logados
-Route::get('/', function () {
-    if (Auth::check()) {
-        return redirect()->route('dashboard');
-    }
-    return view('welcome');
-})->name('home');
+// 1. Rota Raiz — landing page (acessível logado ou não)
+Route::view('/', 'welcome')->name('home');
 
 // Política de Privacidade (pública)
 Route::view('/privacidade', 'privacy')->name('privacy');
@@ -65,24 +60,25 @@ Route::get('/invite/accept/{family}', function (Request $request, Family $family
 Route::middleware(['auth', 'verified'])->group(function () {
 
     // --- Rotas do Projeto Financeiro (DuoFund) ---
-    Volt::route('dashboard', 'pages.dashboard')->name('dashboard');
-    Volt::route('expenses', 'pages.expenses')->name('expenses');
-    Volt::route('budget', 'pages.budget')->name('budget');
-    Volt::route('goals', 'pages.goals')->name('goals');
-    Volt::route('wishlist', 'pages.wishlist')->name('wishlist');
-    Volt::route('installments', 'pages.installments')->name('installments');
-    Volt::route('report', 'pages.report')->name('report');
-    Volt::route('help', 'pages.help')->name('help');
+    // URLs em pt-BR; nomes de rota mantidos para não quebrar route() e redirects.
+    Volt::route('painel', 'pages.dashboard')->name('dashboard');
+    Volt::route('transacoes', 'pages.expenses')->name('expenses');
+    Volt::route('orcamento', 'pages.budget')->name('budget');
+    Volt::route('metas', 'pages.goals')->name('goals');
+    Volt::route('desejos', 'pages.wishlist')->name('wishlist');
+    Volt::route('parcelas', 'pages.installments')->name('installments');
+    Volt::route('relatorio', 'pages.report')->name('report');
+    Volt::route('ajuda', 'pages.help')->name('help');
 
     // --- Rotas de Configuração ---
-    Route::redirect('settings', 'settings/profile');
+    Route::redirect('configuracoes', 'configuracoes/perfil');
 
-    Volt::route('settings/profile', 'settings.profile')->name('profile.edit');
-    Volt::route('settings/password', 'settings.password')->name('user-password.edit');
-    Volt::route('settings/appearance', 'settings.appearance')->name('appearance.edit');
+    Volt::route('configuracoes/perfil', 'settings.profile')->name('profile.edit');
+    Volt::route('configuracoes/senha', 'settings.password')->name('user-password.edit');
+    Volt::route('configuracoes/aparencia', 'settings.appearance')->name('appearance.edit');
 
     // Lógica de 2FA
-    Volt::route('settings/two-factor', 'settings.two-factor')
+    Volt::route('configuracoes/duas-etapas', 'settings.two-factor')
         ->middleware(
             when(
                 Features::canManageTwoFactorAuthentication()
@@ -93,3 +89,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         )
         ->name('two-factor.show');
 });
+
+// Redireciona URLs antigas (inglês) para as novas em pt-BR
+Route::redirect('dashboard', 'painel');
+Route::redirect('expenses', 'transacoes');
+Route::redirect('budget', 'orcamento');
+Route::redirect('goals', 'metas');
+Route::redirect('wishlist', 'desejos');
+Route::redirect('installments', 'parcelas');
+Route::redirect('report', 'relatorio');
+Route::redirect('help', 'ajuda');
+Route::redirect('settings', 'configuracoes');
+Route::redirect('settings/profile', 'configuracoes/perfil');
+Route::redirect('settings/password', 'configuracoes/senha');
