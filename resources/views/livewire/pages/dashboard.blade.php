@@ -341,7 +341,10 @@ $summary = computed(function() {
 
             <div class="flex-1 overflow-y-auto pr-1 space-y-2">
                 @forelse($this->summary['recent'] as $t)
-                    <div class="flex items-center justify-between group p-2 hover:bg-gray-50 rounded-lg transition border border-transparent hover:border-gray-100">
+                    <button type="button"
+                        @click="transactionModalOpen = true; Livewire.dispatch('edit-transaction', { id: {{ $t->id }} })"
+                        class="w-full text-left flex items-center justify-between group p-2 min-h-[48px] hover:bg-gray-50 active:bg-gray-100 rounded-lg transition border border-transparent hover:border-gray-100 cursor-pointer"
+                        title="Tocar para editar">
                         <div class="flex items-center overflow-hidden">
                             <div class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center mr-2 {{ $t->type == 'income' ? 'bg-green-100 text-green-600' : ($t->type == 'savings' ? 'bg-violet-100 text-violet-600' : 'bg-red-100 text-red-600') }}">
                                 <i data-lucide="{{ $t->type == 'income' ? 'arrow-up' : ($t->type == 'savings' ? 'piggy-bank' : 'arrow-down') }}" class="w-3.5 h-3.5"></i>
@@ -358,10 +361,15 @@ $summary = computed(function() {
                                 </p>
                             </div>
                         </div>
-                        <span class="text-xs font-bold whitespace-nowrap {{ $t->type == 'income' ? 'text-green-600' : ($t->type == 'savings' ? 'text-violet-600' : 'text-gray-900') }}">
-                            {{ $t->type == 'income' ? '+' : ($t->type == 'savings' ? '' : '-') }}{{ number_format($t->amount, 0, ',', '.') }}
+                        <span class="flex items-center gap-1.5 whitespace-nowrap">
+                            <span class="text-xs font-bold {{ $t->type == 'income' ? 'text-green-600' : ($t->type == 'savings' ? 'text-violet-600' : 'text-gray-900') }}">
+                                {{ $t->type == 'income' ? '+' : ($t->type == 'savings' ? '' : '-') }}{{ number_format($t->amount, 0, ',', '.') }}
+                            </span>
+                            <span class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 group-hover:text-primary group-hover:bg-blue-50 transition">
+                                <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                            </span>
                         </span>
-                    </div>
+                    </button>
                 @empty
                     <div class="h-full flex flex-col items-center justify-center text-gray-400 opacity-70 py-6">
                         <i data-lucide="calendar-x" class="w-8 h-8 mb-2"></i>

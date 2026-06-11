@@ -275,14 +275,14 @@ $today = function() {
                     <span class="text-[11px] font-bold whitespace-nowrap text-green-600">
                         + R$ {{ number_format($t->amount, 2, ',', '.') }}
                     </span>
-                    <div class="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    <div class="flex items-center gap-2 sm:gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
                         <button @click="transactionModalOpen = true; Livewire.dispatch('edit-transaction', { id: {{ $t->id }} })"
-                            class="p-1 text-blue-500 hover:bg-blue-50 rounded-md transition">
-                            <i data-lucide="pencil" class="w-3 h-3"></i>
+                            class="w-9 h-9 flex items-center justify-center text-blue-500 hover:bg-blue-50 rounded-lg transition" aria-label="Editar" title="Editar">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
                         </button>
                         <button wire:click="confirmDelete({{ $t->id }})"
-                            class="p-1 text-red-500 hover:bg-red-50 rounded-md transition">
-                            <i data-lucide="trash-2" class="w-3 h-3"></i>
+                            class="w-9 h-9 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg transition" aria-label="Excluir" title="Excluir">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
                         </button>
                     </div>
                 </div>
@@ -348,14 +348,14 @@ $today = function() {
                     <span class="text-[11px] font-bold whitespace-nowrap {{ $t->type == 'savings' ? 'text-violet-600' : 'text-gray-900' }}">
                         {{ $t->type == 'savings' ? '' : '-' }} R$ {{ number_format($t->amount, 2, ',', '.') }}
                     </span>
-                    <div class="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    <div class="flex items-center gap-2 sm:gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
                         <button @click="transactionModalOpen = true; Livewire.dispatch('edit-transaction', { id: {{ $t->id }} })"
-                            class="p-1 text-blue-500 hover:bg-blue-50 rounded-md transition">
-                            <i data-lucide="pencil" class="w-3 h-3"></i>
+                            class="w-9 h-9 flex items-center justify-center text-blue-500 hover:bg-blue-50 rounded-lg transition" aria-label="Editar" title="Editar">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
                         </button>
                         <button wire:click="confirmDelete({{ $t->id }})"
-                            class="p-1 text-red-500 hover:bg-red-50 rounded-md transition">
-                            <i data-lucide="trash-2" class="w-3 h-3"></i>
+                            class="w-9 h-9 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg transition" aria-label="Excluir" title="Excluir">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
                         </button>
                     </div>
                 </div>

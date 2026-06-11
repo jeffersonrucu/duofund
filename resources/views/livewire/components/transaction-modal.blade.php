@@ -336,9 +336,19 @@ $cancelBatchEdit = function() {
                 {{-- Valor --}}
                 <div>
                     <label class="block text-[11px] font-medium text-gray-500 mb-1">Valor</label>
-                    <div class="relative">
+                    <div class="relative"
+                         x-data="{
+                            format() {
+                                let d = this.$refs.amount.value.replace(/\D/g, '');
+                                if (d === '') { this.$refs.amount.value = ''; return; }
+                                this.$refs.amount.value = (parseInt(d, 10) / 100)
+                                    .toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            }
+                         }"
+                         x-init="format(); $watch('$wire.amount', () => $nextTick(() => format()))">
                         <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
-                        <input type="text" inputmode="decimal" wire:model="amount" placeholder="0,00" required 
+                        <input type="text" inputmode="numeric" x-ref="amount" wire:model.blur="amount" placeholder="0,00" required
+                            x-on:input="format()"
                             class="w-full pl-9 pr-3 py-2 text-lg font-bold rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
                     </div>
                     @error('amount') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
@@ -354,15 +364,63 @@ $cancelBatchEdit = function() {
 
                 {{-- Categoria --}}
                 @if($type === 'expense')
-                <div>
+                <div class="relative"
+                     x-data="{
+                        open: false,
+                        cats: @js($categories_list->values()),
+                        get q() { return $wire.category || '' },
+                        get filtered() {
+                            const t = this.q.toLowerCase().trim();
+                            if (!t) return this.cats;
+                            return this.cats.filter(c => c.toLowerCase().includes(t));
+                        },
+                        get canCreate() {
+                            const t = this.q.trim();
+                            return t.length > 0 && !this.cats.some(c => c.toLowerCase() === t.toLowerCase());
+                        },
+                        pick(c) { $wire.set('category', c); this.open = false; }
+                     }"
+                     x-on:click.away="open = false"
+                     x-on:keydown.escape="open = false">
                     <label class="block text-[11px] font-medium text-gray-500 mb-1">Categoria</label>
-                    <input type="text" wire:model="category" list="categories-list" placeholder="Digite ou selecione..."
-                        class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
-                    <datalist id="categories-list">
-                        @foreach($categories_list as $cat) 
-                            <option value="{{ $cat }}">
-                        @endforeach
-                    </datalist>
+
+                    <div class="relative">
+                        <input type="text" wire:model.live.debounce.200ms="category" autocomplete="off"
+                            x-on:focus="open = true" x-on:input="open = true"
+                            placeholder="Toque ou digite a categoria..."
+                            class="w-full px-3 py-2 pr-9 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
+                        <button type="button" tabindex="-1" x-on:click="open = !open"
+                            class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 p-1">
+                            <i data-lucide="chevron-down" class="w-4 h-4 transition-transform" :class="open && 'rotate-180'"></i>
+                        </button>
+                    </div>
+
+                    <div x-show="open" x-cloak x-transition.opacity.duration.150ms
+                        class="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-44 overflow-y-auto py-1">
+                        <template x-for="c in filtered" :key="c">
+                            <button type="button" x-on:click="pick(c)"
+                                class="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 transition flex items-center justify-between"
+                                :class="(($wire.category || '').toLowerCase() === c.toLowerCase()) ? 'text-primary font-semibold bg-blue-50/50' : 'text-gray-700'">
+                                <span x-text="c"></span>
+                                <span x-show="($wire.category || '').toLowerCase() === c.toLowerCase()" class="text-primary text-xs">✓</span>
+                            </button>
+                        </template>
+
+                        <div x-show="filtered.length === 0 && !canCreate" class="px-3 py-2 text-xs text-gray-400">
+                            Nada encontrado.
+                        </div>
+
+                        <button type="button" x-show="canCreate" x-on:click="open = false"
+                            class="w-full text-left px-3 py-2.5 text-sm text-primary hover:bg-blue-50 transition border-t border-gray-100 flex items-center gap-1.5">
+                            <span class="text-base leading-none">+</span>
+                            <span>Criar "<span class="font-semibold" x-text="q"></span>"</span>
+                        </button>
+                    </div>
+
+                    <p class="text-[10px] text-gray-400 mt-1.5 flex items-start gap-1">
+                        <i data-lucide="info" class="w-3 h-3 flex-shrink-0 mt-px"></i>
+                        <span>Categoria nova é criada na hora. Defina os limites na página <strong>Orçamento</strong>.</span>
+                    </p>
                 </div>
                 @endif
 
