@@ -46,7 +46,12 @@ $data = computed(function() {
     $totals = app(\App\Services\MonthlySummaryService::class)->for($user, $this->view, $date);
     $income = $totals['income'] - $totals['transfer'];
 
-    return compact('categories', 'usage', 'totalBudget', 'transfer', 'income');
+    // Gasto fora do plano: o que passou do limite (tudo, se a categoria não tem limite
+    // ou se a transação está sem categoria). Já saiu do caixa, então não sobra para planejar.
+    $withinPlan = $categories->sum(fn ($c) => min((float) $c->limit, (float) ($usage[$c->name] ?? 0)));
+    $overrun = max(0, (float) $usage->sum() - $withinPlan);
+
+    return compact('categories', 'usage', 'totalBudget', 'transfer', 'income', 'overrun');
 });
 
 $detailTransactions = computed(function() {
@@ -147,7 +152,8 @@ $deleteCat = function($id) {
         $totalSpent = collect($this->data['usage'])->sum();
         $pctUsed = $totalBudget > 0 ? min(100, round(($totalSpent / $totalBudget) * 100)) : ($totalSpent > 0 ? 100 : 0);
         $income = $this->data['income'];
-        $available = $income - $totalBudget;
+        $overrun = $this->data['overrun'];
+        $available = $income - $totalBudget - $overrun;
     @endphp
 
     <div class="mb-4 sm:mb-6">
@@ -197,6 +203,9 @@ $deleteCat = function($id) {
                             Entradas R$ {{ number_format($income, 2, ',', '.') }}
                             @if($this->data['transfer'] > 0)<span class="text-gray-400">(já sem a transferência)</span>@endif
                             − planejado R$ {{ number_format($totalBudget, 2, ',', '.') }}
+                            @if($overrun > 0)
+                                − R$ {{ number_format($overrun, 2, ',', '.') }} gastos fora do plano
+                            @endif
                         </p>
                     </div>
                 </div>

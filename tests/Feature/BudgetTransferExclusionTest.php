@@ -138,6 +138,19 @@ class BudgetTransferExclusionTest extends TestCase
         $this->assertEquals(5000.0, $data['income']);
     }
 
+    public function test_budget_page_counts_spending_beyond_plan_as_committed(): void
+    {
+        Category::create(['user_id' => $this->user->id, 'name' => 'Mercado', 'limit' => 1000, 'scope' => 'personal']);
+        Category::create(['user_id' => $this->user->id, 'name' => 'Outros', 'limit' => 0, 'scope' => 'personal']);
+        $this->expense('Mercado', 1200);   // 200 acima do limite
+        $this->expense('Outros', 400);     // sem limite: conta tudo
+        $this->expense('Sem categoria', 50); // sem categoria: conta tudo
+
+        $data = Volt::test('pages.budget')->get('data');
+
+        $this->assertEquals(650.0, $data['overrun']);
+    }
+
     public function test_report_category_ranking_excludes_transfer(): void
     {
         $this->expense('Mercado', 300);
