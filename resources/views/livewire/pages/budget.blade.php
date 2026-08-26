@@ -42,7 +42,11 @@ $data = computed(function() {
 
     $totalBudget = $categories->sum('limit');
 
-    return compact('categories', 'usage', 'totalBudget', 'transfer');
+    // Renda do mês que sobra para planejar: entradas menos o que vai para a conta do casal
+    $totals = app(\App\Services\MonthlySummaryService::class)->for($user, $this->view, $date);
+    $income = $totals['income'] - $totals['transfer'];
+
+    return compact('categories', 'usage', 'totalBudget', 'transfer', 'income');
 });
 
 $detailTransactions = computed(function() {
@@ -142,7 +146,8 @@ $deleteCat = function($id) {
         $totalBudget = $this->data['totalBudget'];
         $totalSpent = collect($this->data['usage'])->sum();
         $pctUsed = $totalBudget > 0 ? min(100, round(($totalSpent / $totalBudget) * 100)) : ($totalSpent > 0 ? 100 : 0);
-        $available = $totalBudget - $totalSpent;
+        $income = $this->data['income'];
+        $available = $income - $totalBudget;
     @endphp
 
     <div class="mb-4 sm:mb-6">
@@ -186,8 +191,13 @@ $deleteCat = function($id) {
                         <x-lucide-wallet class="w-5 h-5" />
                     </div>
                     <div>
-                        <p class="text-[11px] text-gray-500 font-medium">{{ $available >= 0 ? 'Disponível' : 'Acima do planejado' }}</p>
-                        <p class="text-xl sm:text-2xl font-bold {{ $available >= 0 ? 'text-gray-900' : 'text-orange-600' }}">R$ {{ number_format(abs($available), 2, ',', '.') }}</p>
+                        <p class="text-[11px] text-gray-500 font-medium">{{ $available >= 0 ? 'Disponível para planejar' : 'Planejado acima das entradas' }}</p>
+                        <p class="text-xl sm:text-2xl font-bold {{ $available >= 0 ? 'text-gray-900' : 'text-orange-600' }}">{{ $available < 0 ? '−' : '' }}R$ {{ number_format(abs($available), 2, ',', '.') }}</p>
+                        <p class="text-[10px] text-gray-500 mt-0.5">
+                            Entradas R$ {{ number_format($income, 2, ',', '.') }}
+                            @if($this->data['transfer'] > 0)<span class="text-gray-400">(já sem a transferência)</span>@endif
+                            − planejado R$ {{ number_format($totalBudget, 2, ',', '.') }}
+                        </p>
                     </div>
                 </div>
             </div>

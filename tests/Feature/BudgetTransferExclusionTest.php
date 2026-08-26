@@ -119,6 +119,25 @@ class BudgetTransferExclusionTest extends TestCase
         $this->assertEquals(6000.0, $data['transfer']);
     }
 
+    public function test_budget_page_income_available_to_plan_excludes_transfer(): void
+    {
+        Transaction::create([
+            'user_id' => $this->user->id,
+            'description' => 'Salário',
+            'amount' => 11000,
+            'type' => 'income',
+            'category' => 'Receita',
+            'scope' => 'personal',
+            'date' => $this->day,
+        ]);
+        $this->transferToShared(6000);
+
+        $data = Volt::test('pages.budget')->get('data');
+
+        // 11.000 de salário − 6.000 que vão para a conta do casal
+        $this->assertEquals(5000.0, $data['income']);
+    }
+
     public function test_report_category_ranking_excludes_transfer(): void
     {
         $this->expense('Mercado', 300);
