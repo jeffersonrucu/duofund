@@ -30,11 +30,24 @@ on(['edit-category' => function($id, $name, $limit, $scope) {
 $save = function() {
     $this->limit = \App\Support\Money::toDecimal($this->limit) ?? '';
 
+    $this->name = trim($this->name);
+
     $this->validate([
         'name' => 'required|string|max:100',
         'limit' => 'nullable|numeric|min:0',
         'scope' => 'required|in:personal,shared'
     ]);
+
+    // Nome único por escopo, ignorando caixa — a família inteira enxerga o shared
+    $duplicate = Category::forView(auth()->user(), $this->scope)
+        ->whereRaw('LOWER(name) = ?', [mb_strtolower($this->name)])
+        ->when($this->isEditing && $this->id, fn ($q) => $q->where('id', '!=', $this->id))
+        ->exists();
+
+    if ($duplicate) {
+        $this->addError('name', 'Já existe uma categoria com esse nome.');
+        return;
+    }
 
     if ($this->isEditing && $this->id) {
         // Atualizar

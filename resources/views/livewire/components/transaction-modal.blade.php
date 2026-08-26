@@ -117,13 +117,23 @@ $save = function () {
     } elseif (empty($this->category)) {
         $this->category = 'Sem categoria';
     } else {
-        // Criar categoria automaticamente se não existir
-        $exists = Category::where('name', $this->category)
-            ->where('scope', $this->scope)
-            ->whereIn('user_id', auth()->user()->getFamilyUserIds())
-            ->exists();
-        
-        if (!$exists) {
+        $this->category = trim($this->category);
+        $existing = Category::forView(auth()->user(), $this->scope)->pluck('name');
+
+        // Reaproveita a grafia já cadastrada ("restaurantes" -> "Restaurantes")
+        $match = $existing->first(fn ($name) => mb_strtolower($name) === mb_strtolower($this->category));
+
+        if ($match !== null) {
+            $this->category = $match;
+        } else {
+            // Evita duplicatas por erro de digitação ("Restaurante" x "Restaurantes")
+            $similar = $existing->first(fn ($name) => levenshtein(mb_strtolower($name), mb_strtolower($this->category)) <= 2);
+
+            if ($similar !== null) {
+                $this->addError('category', "Já existe a categoria \"{$similar}\". Selecione-a ou escolha outro nome.");
+                return;
+            }
+
             Category::create([
                 'user_id' => auth()->id(),
                 'name' => $this->category,
@@ -416,6 +426,7 @@ $cancelBatchEdit = function() {
                             <x-lucide-list class="w-4 h-4" />
                         </button>
                     </div>
+                    @error('category') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
                     <p class="text-[10px] text-gray-400 mt-1.5 flex items-start gap-1">
                         <x-lucide-info class="w-3 h-3 flex-shrink-0 mt-px" />
                         <span>Categoria nova é criada na hora. Defina limites em <strong>Categorias</strong>.</span>
@@ -478,6 +489,7 @@ $cancelBatchEdit = function() {
                         </button>
                     </div>
 
+                    @error('category') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
                     <p class="text-[10px] text-gray-400 mt-1.5 flex items-start gap-1">
                         <x-lucide-info class="w-3 h-3 flex-shrink-0 mt-px" />
                         <span>Categoria nova é criada na hora. Defina os limites na página <strong>Categorias</strong>.</span>
