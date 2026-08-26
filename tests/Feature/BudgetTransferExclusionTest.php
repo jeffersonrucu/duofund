@@ -98,11 +98,13 @@ class BudgetTransferExclusionTest extends TestCase
         $this->expense('Mercado', 500);
         $this->transferToShared(6000);
 
-        $this->getJson('/api/mcp/summary?scope=personal', ['Authorization' => 'Bearer test-token'])
-            ->assertOk()
-            ->assertJsonPath('expenses', 6500.0)
-            ->assertJsonPath('transfer', 6000.0)
-            ->assertJsonPath('budget_used_pct', 50.0);
+        $response = $this->getJson('/api/mcp/summary?scope=personal', ['Authorization' => 'Bearer test-token'])
+            ->assertOk();
+
+        // json_encode descarta ".0", então comparar com assertEquals, não por identidade
+        $this->assertEquals(6500, $response->json('expenses'));
+        $this->assertEquals(6000, $response->json('transfer'));
+        $this->assertEquals(50, $response->json('budget_used_pct'));
     }
 
     public function test_report_category_ranking_excludes_transfer(): void
