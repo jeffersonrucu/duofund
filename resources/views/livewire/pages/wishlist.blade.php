@@ -107,8 +107,9 @@ $save = function () {
 };
 
 $openSim = function ($id) {
+    $now    = Carbon::now();
     $totals = app(\App\Services\MonthlySummaryService::class)
-        ->for(auth()->user(), $this->view, Carbon::now());
+        ->for(auth()->user(), $this->view, $now);
 
     $this->simIncome    = $totals['income'];
     $this->simExpenses  = $totals['expense'];
