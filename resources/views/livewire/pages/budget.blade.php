@@ -142,10 +142,11 @@ $deleteCat = function($id) {
         $totalBudget = $this->data['totalBudget'];
         $totalSpent = collect($this->data['usage'])->sum();
         $pctUsed = $totalBudget > 0 ? min(100, round(($totalSpent / $totalBudget) * 100)) : ($totalSpent > 0 ? 100 : 0);
+        $available = $totalBudget - $totalSpent;
     @endphp
 
     <div class="mb-4 sm:mb-6">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div class="bg-gradient-to-r from-blue-50 to-white p-4 rounded-xl border border-blue-100 shadow-sm">
                 <div class="flex items-center gap-3">
                     <div class="p-2 bg-blue-100 text-blue-600 rounded-lg">
@@ -176,6 +177,17 @@ $deleteCat = function($id) {
                         <div class="w-full bg-red-100 rounded-full h-2 mt-1.5">
                             <div class="{{ $pctUsed > 100 ? 'bg-red-500' : ($pctUsed > 80 ? 'bg-yellow-500' : 'bg-primary') }} h-2 rounded-full transition-all duration-500" style="width: {{ min(100, $pctUsed) }}%"></div>
                         </div>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gradient-to-r {{ $available >= 0 ? 'from-green-50 border-green-100' : 'from-orange-50 border-orange-100' }} to-white p-4 rounded-xl border shadow-sm">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 rounded-lg {{ $available >= 0 ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600' }}">
+                        <x-lucide-wallet class="w-5 h-5" />
+                    </div>
+                    <div>
+                        <p class="text-[11px] text-gray-500 font-medium">{{ $available >= 0 ? 'Disponível' : 'Acima do planejado' }}</p>
+                        <p class="text-xl sm:text-2xl font-bold {{ $available >= 0 ? 'text-gray-900' : 'text-orange-600' }}">R$ {{ number_format(abs($available), 2, ',', '.') }}</p>
                     </div>
                 </div>
             </div>
