@@ -4,7 +4,7 @@ use App\Http\Controllers\Api\DuofundMcpController;
 use App\Http\Middleware\DuofundMcp;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(DuofundMcp::class)->prefix('mcp')->group(function () {
+Route::middleware([DuofundMcp::class, 'throttle:60,1'])->prefix('mcp')->group(function () {
     // Summary
     Route::get('/summary', [DuofundMcpController::class, 'summary']);
 

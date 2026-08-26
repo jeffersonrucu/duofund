@@ -7,49 +7,33 @@ use App\Models\Category;
 use App\Models\Goal;
 use App\Models\Transaction;
 use App\Models\WishlistItem;
+use App\Services\MonthlySummaryService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 
 class DuofundMcpController extends Controller
 {
     // ─── SUMMARY ──────────────────────────────────────────────────────────────
 
-    public function summary(Request $request): JsonResponse
+    public function summary(Request $request, MonthlySummaryService $summary): JsonResponse
     {
-        $user      = auth()->user();
-        $familyIds = $user->getFamilyUserIds();
-        $scope     = $request->query('scope', 'personal');
-        $month     = $request->query('month', now()->format('Y-m'));
-        $date      = Carbon::parse($month . '-01');
+        $user  = auth()->user();
+        $scope = $this->validatedScope($request);
+        $date  = $this->validatedMonth($request);
 
-        $txQuery = Transaction::query()
-            ->whereYear('date', $date->year)
-            ->whereMonth('date', $date->month);
-
-        $catQuery = Category::query();
-
-        if ($scope === 'shared') {
-            $txQuery->whereIn('user_id', $familyIds)->where('scope', 'shared');
-            $catQuery->whereIn('user_id', $familyIds)->where('scope', 'shared');
-        } else {
-            $txQuery->where('user_id', $user->id)->where('scope', 'personal');
-            $catQuery->where('user_id', $user->id)->where('scope', 'personal');
-        }
-
-        $income   = (clone $txQuery)->where('type', 'income')->sum('amount');
-        $expenses = (clone $txQuery)->where('type', 'expense')->sum('amount');
-        $budget   = $catQuery->sum('limit');
+        $totals = $summary->for($user, $scope, $date);
+        $budget = (float) Category::forView($user, $scope)->sum('limit');
 
         return response()->json([
             'month'          => $date->locale('pt_BR')->isoFormat('MMMM [de] YYYY'),
             'scope'          => $scope,
-            'income'         => (float) $income,
-            'expenses'       => (float) $expenses,
-            'balance'        => (float) ($income - $expenses),
-            'budget_total'   => (float) $budget,
-            'budget_used_pct'=> $budget > 0 ? round(($expenses / $budget) * 100, 1) : 0,
+            'income'         => $totals['income'],
+            'expenses'       => $totals['expense'],
+            'balance'        => $totals['balance'],
+            'budget_total'   => $budget,
+            'budget_used_pct'=> $budget > 0 ? round(($totals['expense'] / $budget) * 100, 1) : 0,
         ]);
     }
 
@@ -57,28 +41,18 @@ class DuofundMcpController extends Controller
 
     public function listCategories(Request $request): JsonResponse
     {
-        $user      = auth()->user();
-        $familyIds = $user->getFamilyUserIds();
-        $scope     = $request->query('scope', 'personal');
-        $month     = $request->query('month', now()->format('Y-m'));
-        $date      = Carbon::parse($month . '-01');
+        $user  = auth()->user();
+        $scope = $this->validatedScope($request);
+        $date  = $this->validatedMonth($request);
 
-        $catQuery = Category::query();
-        $txQuery  = Transaction::query()
-            ->whereYear('date', $date->year)
-            ->whereMonth('date', $date->month)
-            ->where('type', 'expense');
+        $usage = Transaction::forView($user, $scope)
+            ->inMonth($date)
+            ->where('type', 'expense')
+            ->selectRaw('category, sum(amount) as total')
+            ->groupBy('category')
+            ->pluck('total', 'category');
 
-        if ($scope === 'shared') {
-            $catQuery->whereIn('user_id', $familyIds)->where('scope', 'shared');
-            $txQuery->whereIn('user_id', $familyIds)->where('scope', 'shared');
-        } else {
-            $catQuery->where('user_id', $user->id)->where('scope', 'personal');
-            $txQuery->where('user_id', $user->id)->where('scope', 'personal');
-        }
-
-        $usage      = $txQuery->selectRaw('category, sum(amount) as total')->groupBy('category')->pluck('total', 'category');
-        $categories = $catQuery->orderBy('name')->get()->map(fn($c) => [
+        $categories = Category::forView($user, $scope)->orderBy('name')->get()->map(fn($c) => [
             'id'        => $c->id,
             'name'      => $c->name,
             'limit'     => (float) $c->limit,
@@ -113,7 +87,7 @@ class DuofundMcpController extends Controller
     {
         $category = Category::findOrFail($id);
 
-        if ($category->user_id !== auth()->id() && !in_array($category->user_id, auth()->user()->getFamilyUserIds())) {
+        if (! $category->manageableBy(auth()->user())) {
             return response()->json(['error' => 'Forbidden'], 403);
         }
 
@@ -127,18 +101,10 @@ class DuofundMcpController extends Controller
 
     public function listGoals(Request $request): JsonResponse
     {
-        $user      = auth()->user();
-        $familyIds = $user->getFamilyUserIds();
-        $scope     = $request->query('scope', 'personal');
+        $user  = auth()->user();
+        $scope = $this->validatedScope($request);
 
-        $query = Goal::query();
-        if ($scope === 'shared') {
-            $query->whereIn('user_id', $familyIds)->where('scope', 'shared');
-        } else {
-            $query->where('user_id', $user->id)->where('scope', 'personal');
-        }
-
-        $goals = $query->orderBy('created_at', 'desc')->get()->map(fn($g) => [
+        $goals = Goal::forView($user, $scope)->orderBy('created_at', 'desc')->get()->map(fn($g) => [
             'id'         => $g->id,
             'name'       => $g->name,
             'target'     => (float) $g->target,
@@ -177,19 +143,29 @@ class DuofundMcpController extends Controller
     public function depositGoal(Request $request, int $id): JsonResponse
     {
         $goal = Goal::findOrFail($id);
-        $data = $request->validate(['amount' => 'required|numeric|min:0.01']);
 
-        $goal->increment('current', $data['amount']);
+        if (! $goal->manageableBy(auth()->user())) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
 
-        Transaction::create([
-            'user_id'     => auth()->id(),
-            'description' => "Reserva para meta: {$goal->name}",
-            'amount'      => $data['amount'],
-            'type'        => 'savings',
-            'category'    => 'Reserva para Metas',
-            'date'        => $request->input('date', now()->toDateString()),
-            'scope'       => $goal->scope,
+        $data = $request->validate([
+            'amount' => 'required|numeric|min:0.01',
+            'date'   => 'nullable|date',
         ]);
+
+        DB::transaction(function () use ($goal, $data, $request) {
+            $goal->increment('current', $data['amount']);
+
+            Transaction::create([
+                'user_id'     => auth()->id(),
+                'description' => "Reserva para meta: {$goal->name}",
+                'amount'      => $data['amount'],
+                'type'        => 'savings',
+                'category'    => 'Reserva para Metas',
+                'date'        => $request->input('date', now()->toDateString()),
+                'scope'       => $goal->scope,
+            ]);
+        });
 
         return response()->json(['message' => "R$ " . number_format($data['amount'], 2, ',', '.') . " adicionado à meta '{$goal->name}'.", 'current' => $goal->fresh()->current]);
     }
@@ -197,11 +173,14 @@ class DuofundMcpController extends Controller
     public function deleteGoal(int $id): JsonResponse
     {
         $goal = Goal::findOrFail($id);
-        if ($goal->user_id !== auth()->id()) {
+
+        if (! $goal->manageableBy(auth()->user())) {
             return response()->json(['error' => 'Forbidden'], 403);
         }
+
         $name = $goal->name;
         $goal->delete();
+
         return response()->json(['message' => "Meta '{$name}' removida."]);
     }
 
@@ -209,22 +188,14 @@ class DuofundMcpController extends Controller
 
     public function listTransactions(Request $request): JsonResponse
     {
-        $user      = auth()->user();
-        $familyIds = $user->getFamilyUserIds();
-        $scope     = $request->query('scope', 'personal');
-        $month     = $request->query('month', now()->format('Y-m'));
-        $type      = $request->query('type');
-        $date      = Carbon::parse($month . '-01');
+        $user  = auth()->user();
+        $request->validate(['type' => 'nullable|in:income,expense,savings']);
 
-        $query = Transaction::query()
-            ->whereYear('date', $date->year)
-            ->whereMonth('date', $date->month);
+        $scope = $this->validatedScope($request);
+        $date  = $this->validatedMonth($request);
+        $type  = $request->query('type');
 
-        if ($scope === 'shared') {
-            $query->whereIn('user_id', $familyIds)->where('scope', 'shared');
-        } else {
-            $query->where('user_id', $user->id)->where('scope', 'personal');
-        }
+        $query = Transaction::forView($user, $scope)->inMonth($date);
 
         if ($type) $query->where('type', $type);
 
@@ -252,15 +223,22 @@ class DuofundMcpController extends Controller
             'scope'       => 'nullable|in:personal,shared',
         ]);
 
-        $transaction = Transaction::create([
-            'user_id'     => auth()->id(),
-            'description' => $data['description'],
-            'amount'      => $data['amount'],
-            'type'        => $data['type'],
-            'category'    => $data['category'] ?? ($data['type'] === 'income' ? 'Receita' : 'Sem categoria'),
-            'date'        => $data['date'] ?? now()->toDateString(),
-            'scope'       => $data['scope'] ?? 'personal',
-        ]);
+        $transaction = DB::transaction(function () use ($data) {
+            $tx = Transaction::create([
+                'user_id'     => auth()->id(),
+                'description' => $data['description'],
+                'amount'      => $data['amount'],
+                'type'        => $data['type'],
+                'category'    => $data['category'] ?? ($data['type'] === 'income' ? 'Receita' : 'Sem categoria'),
+                'date'        => $data['date'] ?? now()->toDateString(),
+                'scope'       => $data['scope'] ?? 'personal',
+            ]);
+
+            // Receita shared debita a conta pessoal (mesma regra do app)
+            app(\App\Services\TransactionMirrorService::class)->createFor($tx);
+
+            return $tx;
+        });
 
         return response()->json(['data' => $transaction, 'message' => "Transação '{$transaction->description}' criada."], 201);
     }
@@ -268,11 +246,14 @@ class DuofundMcpController extends Controller
     public function deleteTransaction(int $id): JsonResponse
     {
         $tx = Transaction::findOrFail($id);
-        if ($tx->user_id !== auth()->id() && !in_array($tx->user_id, auth()->user()->getFamilyUserIds())) {
+
+        if (! $tx->manageableBy(auth()->user())) {
             return response()->json(['error' => 'Forbidden'], 403);
         }
+
         $desc = $tx->description;
         $tx->delete();
+
         return response()->json(['message' => "Transação '{$desc}' removida."]);
     }
 
@@ -280,27 +261,22 @@ class DuofundMcpController extends Controller
 
     public function listWishlist(Request $request): JsonResponse
     {
-        $user      = auth()->user();
-        $familyIds = $user->getFamilyUserIds();
-        $scope     = $request->query('scope', 'personal');
+        $user  = auth()->user();
+        $scope = $this->validatedScope($request);
 
-        $query = WishlistItem::query();
-        if ($scope === 'shared') {
-            $query->whereIn('user_id', $familyIds)->where('scope', 'shared');
-        } else {
-            $query->where('user_id', $user->id)->where('scope', 'personal');
-        }
-
-        $items = $query->orderByRaw("FIELD(priority,'high','medium','low')")->get()->map(fn($i) => [
-            'id'       => $i->id,
-            'name'     => $i->name,
-            'price'    => (float) $i->price,
-            'url'      => $i->url,
-            'priority' => $i->priority,
-            'scope'    => $i->scope,
-            'status'   => $i->status,
-            'notes'    => $i->notes,
-        ]);
+        $items = WishlistItem::forView($user, $scope)
+            ->orderByRaw("FIELD(priority,'high','medium','low')")
+            ->get()
+            ->map(fn($i) => [
+                'id'       => $i->id,
+                'name'     => $i->name,
+                'price'    => (float) $i->price,
+                'url'      => $i->url,
+                'priority' => $i->priority,
+                'scope'    => $i->scope,
+                'status'   => $i->status,
+                'notes'    => $i->notes,
+            ]);
 
         return response()->json(['data' => $items, 'total' => $items->sum('price')]);
     }
@@ -333,11 +309,36 @@ class DuofundMcpController extends Controller
     public function deleteWishlistItem(int $id): JsonResponse
     {
         $item = WishlistItem::findOrFail($id);
-        if ($item->user_id !== auth()->id()) {
+
+        if (! $item->manageableBy(auth()->user())) {
             return response()->json(['error' => 'Forbidden'], 403);
         }
+
         $name = $item->name;
         $item->delete();
+
         return response()->json(['message' => "'{$name}' removido da lista de desejos."]);
+    }
+
+    // ─── FILTROS DE QUERY ─────────────────────────────────────────────────────
+
+    /** Escopo da query. Valor fora de personal/shared vira 422, não 'shared' silencioso. */
+    private function validatedScope(Request $request): string
+    {
+        $request->validate(['scope' => 'nullable|in:personal,shared']);
+
+        return $request->query('scope', 'personal');
+    }
+
+    /** Mês da query no formato Y-m. Valor inválido vira 422, não 500 no Carbon::parse. */
+    private function validatedMonth(Request $request): Carbon
+    {
+        $request->validate(['month' => 'nullable|date_format:Y-m']);
+
+        $month = $request->query('month');
+
+        return $month
+            ? Carbon::createFromFormat('Y-m', $month)->startOfMonth()
+            : now()->startOfMonth();
     }
 }

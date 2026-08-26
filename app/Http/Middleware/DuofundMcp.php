@@ -10,8 +10,8 @@ class DuofundMcp
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $token  = env('DUOFUND_MCP_TOKEN');
-        $userId = env('DUOFUND_MCP_USER_ID', 1);
+        $token  = config('services.duofund_mcp.token');
+        $userId = config('services.duofund_mcp.user_id');
 
         if (!$token) {
             return response()->json(['error' => 'MCP not configured'], 500);
@@ -24,6 +24,9 @@ class DuofundMcp
         }
 
         auth()->loginUsingId($userId);
+
+        // Garante que erro de validação volte como JSON 422, e não como redirect.
+        $request->headers->set('Accept', 'application/json');
 
         return $next($request);
     }
