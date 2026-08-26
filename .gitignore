@@ -25,3 +25,6 @@ yarn-error.log
 /mcp/node_modules
 # Contém token de produção — manter fora do versionamento
 /CLAUDE.md
+
+# Contém segredos de produção — manter fora do versionamento
+.env.prod
