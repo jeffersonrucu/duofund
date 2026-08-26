@@ -138,6 +138,9 @@ banco.
 - [x] Descrição, homepage e 15 topics
 - [x] README reescrito com 14 screenshots reais, geradas de **dados semeados**,
       nunca de produção
-- [ ] **Tornar público** — a única ação que sobrou, e é irreversível na prática:
-      `gh api -X PATCH repos/Studio-STG/duofund -f visibility=public`
+- [x] **Público** desde 2026-08-26
+- [x] Transferido de `Studio-STG` para **`jeffersonrucu/duofund`** (conta pessoal).
+      Secrets, topics e workflow sobreviveram; secret scanning e push protection
+      resetam na transferência e foram religados
+- [x] Secret scanning, push protection e Dependabot ativos — sem alertas
 - [ ] Definir licença (hoje sem arquivo = todos os direitos reservados)

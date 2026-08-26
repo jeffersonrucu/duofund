@@ -7,7 +7,7 @@
 Um app de finanças pessoais para casais, onde cada um enxerga o próprio dinheiro
 e os dois enxergam o dinheiro do casal — sem misturar as duas coisas.
 
-[![CI](https://github.com/Studio-STG/duofund/actions/workflows/ci.yml/badge.svg)](https://github.com/Studio-STG/duofund/actions/workflows/ci.yml)
+[![CI](https://github.com/jeffersonrucu/duofund/actions/workflows/ci.yml/badge.svg)](https://github.com/jeffersonrucu/duofund/actions/workflows/ci.yml)
 ![Laravel 12](https://img.shields.io/badge/Laravel-12-FF2D20?logo=laravel&logoColor=white)
 ![PHP 8.2+](https://img.shields.io/badge/PHP-8.2+-777BB4?logo=php&logoColor=white)
 ![Livewire Volt](https://img.shields.io/badge/Livewire-Volt-4E56A6)
@@ -124,7 +124,7 @@ servidos pelo próprio domínio.
 ## Rodando localmente
 
 ```bash
-git clone git@github.com:Studio-STG/duofund.git
+git clone git@github.com:jeffersonrucu/duofund.git
 cd duofund
 
 cp .env.example .env
