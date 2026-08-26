@@ -12,7 +12,7 @@ Legenda: `[ ]` pendente · `[~]` em andamento · `[x]` feito · `[!]` bloqueado 
 - [x] **1.3** `APP_KEY` rotacionada em produção (2026-08-25). Backup do `.env` antigo no servidor em `.env.bak-2026-08-25`
 - [!] **1.4** Rotacionar senha do banco (cPanel) — depende do Jefferson
 - [x] **1.5** `.env` do servidor — `APP_ENV`/`APP_DEBUG` já estavam certos; aplicados `MAIL_MAILER=log` (tira o Mailpit do caminho, reset de senha não dá mais 500) e `LOG_CHANNEL=daily`
-- [ ] **1.5b** Pós-deploy: aplicar `MAIL_LOG_CHANNEL=mail` e `LOG_LEVEL=warning` no `.env` do servidor (o canal `mail` só existe depois que `config/logging.php` subir)
+- [x] **1.5b** Aplicados em produção: `LOG_LEVEL=warning`, `MAIL_LOG_CHANNEL=mail`. Backup do `.env` em `.env.bak-pos-deploy`
 - [x] **1.6** `emailVerification` do Fortify — investigado, **nada a fazer**: a view guarda com `instanceof MustVerifyEmail`, que o `User` não implementa, então todo o caminho é inalcançável. Sem crash. Reavaliar quando houver SMTP
 - [x] **1.7** Canal de log `mail` (`config/logging.php`) — mailer `log` grava em `storage/logs/mail.log` a nível debug, pra o link de reset não sumir quando o `LOG_LEVEL` subir. `MAIL_LOG_CHANNEL` documentado no `.env.example`
 - [ ] **1.8** SMTP de verdade — Jefferson optou por adiar. Enquanto isso o "esqueci minha senha" mostra sucesso mas não envia nada; o link fica recuperável em `storage/logs/mail.log`
@@ -42,11 +42,11 @@ Legenda: `[ ]` pendente · `[~]` em andamento · `[x]` feito · `[!]` bloqueado 
 
 ## Bloco 4 — Observabilidade e qualidade 🔧
 
-- [x] **4.1** `sentry/sentry-laravel` instalado e ligado ao handler (`bootstrap/app.php`). **Inerte até o Jefferson preencher `SENTRY_LARAVEL_DSN`** no `.env` do servidor — chave documentada no `.env.example`
+- [x] **4.1** `sentry/sentry-laravel` **ativo em produção** — o DSN estava só no `.env` local, foi levado pro servidor. Evento de teste `c88f6376` enviado de lá
 - [x] **4.2** `scripts/backup-db.sh` — **não usei o `spatie/laravel-backup`**: ele depende de `proc_open` pra chamar o mysqldump, e hospedagem compartilhada costuma bloquear isso por `disable_functions`. Não consigo verificar o servidor daqui, então shell + cron (que ignora o PHP) é mais robusto e sem dependência
   - senha via `--defaults-extra-file` (em `--password=` ela apareceria no `ps`), gzip, rotação de 14 dias, guard de dump truncado
   - o guard já pegou uma falha real no teste: sem `--no-tablespaces` o mysqldump 8 exige privilégio `PROCESS`, que usuário de shared hosting não tem — teria quebrado igual no HostGator
-  - testado contra o MySQL local: 15 tabelas, 4KB. **Falta o Jefferson cadastrar o cron** (linha pronta no cabeçalho do script)
+  - **rodando em produção**: dump de 40K gerado, cron diário às 03h20 registrado. Confirmou que o `--no-tablespaces` era mesmo necessário lá
 - [x] **4.3** `larastan/larastan` nível 5, **sem erros**. `tests/` ficou fora do escopo (o PHPStan não resolve o `$this` das closures do Pest: 75 falsos positivos)
   - achados reais corrigidos: `User::family()` e `Family::users()` sem tipo de retorno (o Larastan não inferia a relação) e `Auth` sem import no `routes/web.php`, funcionando só pelo alias global
   - scripts `composer analyse` e `composer check` adicionados
@@ -66,3 +66,33 @@ Legenda: `[ ]` pendente · `[~]` em andamento · `[x]` feito · `[!]` bloqueado 
 - [!] **5.6** Undo após deletar — **parado de propósito, precisa de decisão**. Soft deletes quebram o `ON DELETE CASCADE` do `mirror_transaction_id`: com `deleted_at`, `$tx->delete()` vira UPDATE, o banco não cascateia, e a **despesa espelho sobrevive ao original apagado** — o saldo do casal quebra em silêncio. Fazer certo = migration em 4 tabelas + reescrever o caminho de espelho (que o `MELHORIAS.md` chama de parte mais frágil do sistema) + a UI do toast
 - [ ] **5.7** PDF do relatório server-side (dompdf) — precisa reescrever o layout flex em tabelas e o Jefferson conferir a saída. Ganho: PDF de texto real em vez de imagem, e −1MB de JS
 - [x] **5.8** Removidos: `layouts/app/header.blade.php` (zero referências), `layouts/auth/card` e `auth/split` (só `auth/simple` é usado), e `resources/js/app.js` vazio que gerava chunk de 0 byte
+
+---
+
+## Deploy 2026-08-25
+
+10 commits publicados (`732ae5f` → `ca90d6f`). Migrations: nenhuma pendente, banco intocado.
+
+- [x] Build, rsync, `optimize` e verificação: páginas, assets e API MCP em 200; os 422 novos respondendo
+- [x] Config de produção aplicada: `LOG_LEVEL`, `MAIL_LOG_CHANNEL`, DSN do Sentry, cron do backup
+
+### Incidente durante o deploy (~10 min fora do ar)
+
+`composer require` rodou dentro do Sail (PHP 8.5) e resolveu `symfony/options-resolver`
+e `symfony/psr-http-message-bridge` na v8.1, que exigem **PHP >= 8.4.1**. O servidor
+roda **8.2.33**, então o `platform_check` do Composer abortou toda requisição: 500 em
+tudo. O rsync ainda empurrou as dependências de dev, e o Pest 4 (PHP ^8.3) elevava o
+piso mesmo sem rodar em produção.
+
+**Corrigido:** os dois pacotes fixados no Symfony 7, `vendor` regerado com `--no-dev`
+e sincronizado com `--delete`, manifestos de `bootstrap/cache` limpos (ainda listavam
+providers de dev, quebrando o `optimize`).
+
+**Como não repetir:** o passo de deploy precisa gerar o `vendor` com
+`composer install --no-dev` antes do rsync. Fixar `config.platform.php` no
+`composer.json` seria o ideal, mas o Pest 4 exige ^8.3 e torna o lock irresolvível —
+por isso a separação dev/produção é o caminho.
+
+- [ ] Documentar o `--no-dev` no passo de deploy do `CLAUDE.md`
+- [ ] API MCP devolve float em precisão total (`"income":11419.899999999999636...`);
+      arredondar para 2 casas no `MonthlySummaryService`. Pré-existente, cosmético
