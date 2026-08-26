@@ -6,8 +6,9 @@ use App\Models\Concerns\ScopedToView;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Carbon;
+use Carbon\Carbon;
 
 class Category extends Model
 {
@@ -17,12 +18,17 @@ class Category extends Model
 
     protected $casts = ['limit' => 'decimal:2'];
 
-    public function user()
+    /** @return BelongsTo<User, $this> */
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    /** Mudanças de limite "deste mês em diante". */
+    /**
+     * Mudanças de limite "deste mês em diante".
+     *
+     * @return HasMany<CategoryLimit, $this>
+     */
     public function limits(): HasMany
     {
         return $this->hasMany(CategoryLimit::class);
@@ -31,19 +37,19 @@ class Category extends Model
     /** Limite vigente no mês: última mudança até aquele mês, senão o limite base. */
     public function limitFor(Carbon $month): float
     {
-        $row = $this->limits()
+        $limit = $this->limits()
             ->where('month', '<=', $month->copy()->startOfMonth()->toDateString())
             ->orderByDesc('month')
-            ->first();
+            ->value('limit');
 
-        return (float) ($row?->limit ?? $this->limit);
+        return (float) ($limit ?? $this->limit);
     }
 
     /**
      * Categorias da visão com `limit` já trocado pelo valor vigente no mês.
      * A troca é só em memória — não salve os modelos devolvidos daqui.
      *
-     * @return Collection<int, static>
+     * @return Collection<int, Category>
      */
     public static function forViewInMonth(User $user, string $view, Carbon $month): Collection
     {
