@@ -1,51 +1,29 @@
 <?php
-use function Livewire\Volt\{state, computed, layout};
+use function Livewire\Volt\{state, computed, layout, uses};
+use App\Livewire\Concerns\HasMonthNavigation;
+use App\Livewire\Concerns\HasScopeToggle;
 use App\Models\Transaction;
 use Carbon\Carbon;
 
 layout('components.layouts.app');
+uses([HasMonthNavigation::class, HasScopeToggle::class]);
 
 state([
     'view'         => session('view_mode', 'personal'),
     'currentMonth' => session('current_month', now()->startOfMonth()->format('Y-m-d')),
 ]);
 
-$setView = function ($mode) {
-    $this->view = $mode;
-    session(['view_mode' => $mode]);
-    $this->dispatch('scope-changed', $mode);
-};
-
-$prevMonth = function () {
-    $this->currentMonth = Carbon::parse($this->currentMonth)->subMonth()->format('Y-m-d');
-    session(['current_month' => $this->currentMonth]);
-};
-
-$nextMonth = function () {
-    $this->currentMonth = Carbon::parse($this->currentMonth)->addMonth()->format('Y-m-d');
-    session(['current_month' => $this->currentMonth]);
-};
-
-$goToday = function () {
-    $this->currentMonth = now()->startOfMonth()->format('Y-m-d');
-    session(['current_month' => $this->currentMonth]);
-};
 
 $monthGroups = computed(function () {
     $user         = auth()->user();
-    $familyIds    = $user->getFamilyUserIds();
     $monthStart   = Carbon::parse($this->currentMonth)->startOfMonth();
     $monthEnd     = Carbon::parse($this->currentMonth)->endOfMonth();
 
-    $query = Transaction::query()->where('is_installment', true)->where('is_recurring', false);
-
-    if ($this->view === 'personal') {
-        $query->where('user_id', $user->id)->where('scope', 'personal');
-    } else {
-        $query->whereIn('user_id', $familyIds)->where('scope', 'shared');
-    }
-
-    $transactions = $query->orderBy('date')->get();
+    $transactions = Transaction::forView($user, $this->view)
+        ->where('is_installment', true)
+        ->where('is_recurring', false)
+        ->orderBy('date')
+        ->get();
     $groups       = $transactions->groupBy(fn ($t) => $t->recurring_group_id ?? 'solo_' . $t->id);
 
     $result = [];
@@ -86,19 +64,10 @@ $summary = computed(function () {
     $groups     = $this->monthGroups;
     $nextStart  = Carbon::parse($this->currentMonth)->addMonth()->startOfMonth();
     $nextEnd    = $nextStart->copy()->endOfMonth();
-    $user       = auth()->user();
-    $familyIds  = $user->getFamilyUserIds();
-
-    $nextQuery = Transaction::query()->where('is_installment', true)
-        ->whereBetween('date', [$nextStart, $nextEnd]);
-
-    if ($this->view === 'personal') {
-        $nextQuery->where('user_id', $user->id)->where('scope', 'personal');
-    } else {
-        $nextQuery->whereIn('user_id', $familyIds)->where('scope', 'shared');
-    }
-
-    $nextMonthTotal = $nextQuery->sum('amount');
+    $nextMonthTotal = Transaction::forView(auth()->user(), $this->view)
+        ->where('is_installment', true)
+        ->whereBetween('date', [$nextStart, $nextEnd])
+        ->sum('amount');
 
     return [
         'count'           => $groups->count(),
@@ -114,16 +83,7 @@ $summary = computed(function () {
 
         {{-- Scope toggle --}}
         <div class="flex flex-col items-center md:items-start justify-self-center md:justify-self-start">
-            <div class="bg-white p-0.5 rounded-lg shadow-sm border border-gray-200 inline-flex">
-                <button wire:click="setView('personal')"
-                    class="px-3 py-1.5 rounded-md text-[11px] sm:text-sm font-medium transition flex items-center {{ $view === 'personal' ? 'bg-primary text-white shadow' : 'text-gray-500 hover:bg-gray-50' }}">
-                    <i data-lucide="user" class="w-3 h-3 sm:w-4 sm:h-4 mr-1"></i> Meu Dinheiro
-                </button>
-                <button wire:click="setView('shared')"
-                    class="px-3 py-1.5 rounded-md text-[11px] sm:text-sm font-medium transition flex items-center {{ $view === 'shared' ? 'bg-purple-600 text-white shadow' : 'text-gray-500 hover:bg-gray-50' }}">
-                    <i data-lucide="users" class="w-3 h-3 sm:w-4 sm:h-4 mr-1"></i> Nosso Dinheiro
-                </button>
-            </div>
+            <x-ui.view-toggle :view="$view" personal-label="Meu Dinheiro" shared-label="Nosso Dinheiro" />
             <p class="text-[10px] text-gray-400 mt-1">
                 @if($view === 'personal') Vendo seus parcelamentos pessoais
                 @else Vendo parcelamentos do casal
@@ -133,23 +93,28 @@ $summary = computed(function () {
 
         {{-- Month navigator --}}
         <div class="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 p-0.5 justify-self-center">
-            <button wire:click="prevMonth" class="p-1.5 hover:bg-gray-100 rounded-md transition text-gray-500">
-                <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            <button wire:click="prevMonth" class="p-1.5 hover:bg-gray-100 rounded-md transition text-gray-500 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center">
+                <x-lucide-chevron-left class="w-4 h-4" />
             </button>
             <div class="px-3 text-center min-w-[130px]">
-                <h2 class="text-xs sm:text-sm font-bold text-gray-800 capitalize">
-                    {{ \Carbon\Carbon::parse($currentMonth)->locale('pt_BR')->translatedFormat('F Y') }}
-                </h2>
+                <div class="relative inline-block">
+                    <h2 class="text-xs sm:text-sm font-bold text-gray-800 capitalize">
+                        {{ \Carbon\Carbon::parse($currentMonth)->locale('pt_BR')->translatedFormat('F Y') }}
+                    </h2>
+                    <input type="month" value="{{ \Carbon\Carbon::parse($currentMonth)->format('Y-m') }}"
+                        x-on:change="$wire.selectMonth($event.target.value)"
+                        class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" aria-label="Escolher mês">
+                </div>
                 @if(\Carbon\Carbon::parse($currentMonth)->isCurrentMonth())
                     <span class="text-[9px] text-green-600 font-medium bg-green-50 px-1.5 py-0.5 rounded-full">Mês Atual</span>
                 @else
-                    <p class="text-[9px] text-gray-400 cursor-pointer hover:text-primary transition underline decoration-dotted" wire:click="goToday">
+                    <p class="text-[9px] text-gray-400 cursor-pointer hover:text-primary transition underline decoration-dotted" wire:click="today">
                         Voltar para hoje
                     </p>
                 @endif
             </div>
-            <button wire:click="nextMonth" class="p-1.5 hover:bg-gray-100 rounded-md transition text-gray-500">
-                <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            <button wire:click="nextMonth" class="p-1.5 hover:bg-gray-100 rounded-md transition text-gray-500 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center">
+                <x-lucide-chevron-right class="w-4 h-4" />
             </button>
         </div>
 
@@ -157,7 +122,7 @@ $summary = computed(function () {
         <div class="hidden md:flex justify-self-end">
             <button @click="transactionModalOpen = true; Livewire.dispatch('open-new-transaction', { type: 'expense', scope: '{{ $view }}', repetition: 'installment' })"
                 class="bg-primary hover:bg-secondary text-white font-medium py-2 px-4 rounded-lg shadow-md shadow-primary/25 items-center transition text-sm flex">
-                <i data-lucide="plus" class="w-4 h-4 mr-1.5"></i> Nova Parcela
+                <x-lucide-plus class="w-4 h-4 mr-1.5" /> Nova Parcela
             </button>
         </div>
     </div>
@@ -167,7 +132,7 @@ $summary = computed(function () {
         <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-3 sm:p-4">
             <div class="flex items-center gap-2 mb-2">
                 <div class="w-7 h-7 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <i data-lucide="credit-card" class="w-3.5 h-3.5 text-amber-600"></i>
+                    <x-lucide-credit-card class="w-3.5 h-3.5 text-amber-600" />
                 </div>
                 <span class="text-[10px] text-gray-400 font-medium leading-tight">Parcelas</span>
             </div>
@@ -178,7 +143,7 @@ $summary = computed(function () {
         <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-3 sm:p-4">
             <div class="flex items-center gap-2 mb-2">
                 <div class="w-7 h-7 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <i data-lucide="banknote" class="w-3.5 h-3.5 text-red-500"></i>
+                    <x-lucide-banknote class="w-3.5 h-3.5 text-red-500" />
                 </div>
                 <span class="text-[10px] text-gray-400 font-medium leading-tight">Total do Mês</span>
             </div>
@@ -189,7 +154,7 @@ $summary = computed(function () {
         <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-3 sm:p-4">
             <div class="flex items-center gap-2 mb-2">
                 <div class="w-7 h-7 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <i data-lucide="trending-down" class="w-3.5 h-3.5 text-orange-500"></i>
+                    <x-lucide-trending-down class="w-3.5 h-3.5 text-orange-500" />
                 </div>
                 <span class="text-[10px] text-gray-400 font-medium leading-tight">Próximo Mês</span>
             </div>
@@ -253,7 +218,7 @@ $summary = computed(function () {
                     </div>
 
                     <div class="flex items-center gap-1 text-blue-600">
-                        <i data-lucide="calendar-clock" class="w-3 h-3"></i>
+                        <x-lucide-calendar-clock class="w-3 h-3" />
                         <span>{{ $group['due_date']->format('d/m') }}</span>
                     </div>
                 </div>
@@ -262,7 +227,7 @@ $summary = computed(function () {
         @empty
         <div class="bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col items-center justify-center py-14 text-gray-400">
             <div class="w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center mb-3">
-                <i data-lucide="credit-card" class="w-7 h-7 opacity-30"></i>
+                <x-lucide-credit-card class="w-7 h-7 opacity-30" />
             </div>
             <p class="font-semibold text-sm text-gray-600">Nenhuma parcela neste mês</p>
             <p class="text-xs text-gray-400 mt-1">
@@ -274,7 +239,7 @@ $summary = computed(function () {
             </p>
             <button @click="transactionModalOpen = true; Livewire.dispatch('open-new-transaction', { type: 'expense', scope: '{{ $view }}', repetition: 'installment' })"
                 class="mt-4 text-xs text-primary hover:underline font-medium flex items-center gap-1">
-                <i data-lucide="plus" class="w-3 h-3"></i> Adicionar parcelamento
+                <x-lucide-plus class="w-3 h-3" /> Adicionar parcelamento
             </button>
         </div>
         @endforelse

@@ -1,31 +1,35 @@
 <?php
-use function Livewire\Volt\{state, computed, layout};
+use function Livewire\Volt\{state, computed, layout, uses};
+use App\Livewire\Concerns\HasScopeToggle;
 use App\Models\Goal;
 
 layout('components.layouts.app');
+uses([HasScopeToggle::class]);
 
 state(['view' => session('view_mode', 'personal'), 'confirmDeleteId' => null])->url();
 
 $goals = computed(function () {
-    $user = auth()->user();
-    $familyIds = $user->getFamilyUserIds();
-
-    $query = Goal::query();
-
-    if ($this->view === 'personal') {
-        $query->where('user_id', $user->id)->where('scope', 'personal');
-    } else {
-        $query->whereIn('user_id', $familyIds)->where('scope', 'shared');
-    }
-
-    return $query->orderBy('created_at', 'desc')->get();
+    return Goal::forView(auth()->user(), $this->view)
+        ->with('user')
+        ->orderBy('created_at', 'desc')
+        ->get();
 });
 
-$setView = function ($mode) {
-    $this->view = $mode;
-    session(['view_mode' => $mode]);
-    $this->dispatch('scope-changed', $mode);
-};
+$summary = computed(function () {
+    $goals = $this->goals;
+    $totalTarget = (float) $goals->sum('target');
+    $totalCurrent = (float) $goals->sum(fn ($g) => min((float) $g->current, (float) $g->target));
+    $pct = $totalTarget > 0 ? min(100, round($totalCurrent / $totalTarget * 100)) : 0;
+    $completed = $goals->filter(fn ($g) => $g->remaining <= 0)->count();
+
+    return [
+        'totalTarget' => $totalTarget,
+        'totalCurrent' => $totalCurrent,
+        'pct' => $pct,
+        'completed' => $completed,
+        'count' => $goals->count(),
+    ];
+});
 
 $setConfirmDelete = function ($id) {
     $this->confirmDeleteId = $id;
@@ -33,7 +37,7 @@ $setConfirmDelete = function ($id) {
 
 $deleteGoal = function ($id) {
     $goal = Goal::find($id);
-    if ($goal && $goal->user_id === auth()->id()) {
+    if ($goal && $goal->manageableBy(auth()->user())) {
         $goal->delete();
         $this->dispatch('notify', 'Meta excluída com sucesso.');
     }
@@ -49,16 +53,7 @@ $deleteGoal = function ($id) {
     {{-- HEADER --}}
     <div class="grid grid-cols-1 md:grid-cols-3 items-center mb-4 sm:mb-6 gap-3">
         <div class="flex flex-col items-center md:items-start justify-self-center md:justify-self-start">
-            <div class="bg-white p-0.5 rounded-lg shadow-sm border border-gray-200 inline-flex">
-                <button wire:click="setView('personal')"
-                    class="px-3 py-1.5 rounded-md text-[11px] sm:text-sm font-medium transition flex items-center {{ $view === 'personal' ? 'bg-primary text-white shadow' : 'text-gray-500 hover:bg-gray-50' }}">
-                    <i data-lucide="user" class="w-3 h-3 sm:w-4 sm:h-4 mr-1"></i> Minhas Metas
-                </button>
-                <button wire:click="setView('shared')"
-                    class="px-3 py-1.5 rounded-md text-[11px] sm:text-sm font-medium transition flex items-center {{ $view === 'shared' ? 'bg-purple-600 text-white shadow' : 'text-gray-500 hover:bg-gray-50' }}">
-                    <i data-lucide="users" class="w-3 h-3 sm:w-4 sm:h-4 mr-1"></i> Nossas Metas
-                </button>
-            </div>
+            <x-ui.view-toggle :view="$view" personal-label="Minhas Metas" shared-label="Nossas Metas" />
             <p class="text-[10px] text-gray-400 mt-1">
                 @if($view === 'personal')
                     Vendo apenas suas metas pessoais
@@ -71,18 +66,33 @@ $deleteGoal = function ($id) {
         <div class="hidden md:flex justify-self-end">
             <button @click="Livewire.dispatch('reset-modal', { scope: '{{ $view }}' }); goalModalOpen = true;"
                 class="bg-primary hover:bg-secondary text-white font-medium py-2 px-4 rounded-lg shadow-md shadow-primary/25 items-center transition text-sm flex">
-                <i data-lucide="plus" class="w-4 h-4 mr-1.5"></i> Nova Meta
+                <x-lucide-plus class="w-4 h-4 mr-1.5" /> Nova Meta
             </button>
         </div>
     </div>
 
-    {{-- SUBTÍTULO --}}
-    <div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-4">
-        <div>
-            <h2 class="text-base sm:text-lg font-bold text-gray-900">Meus Objetivos</h2>
-            <p class="text-xs text-gray-500">Defina alvos financeiros e acompanhe seu progresso.</p>
+    {{-- RESUMO --}}
+    @php $s = $this->summary; @endphp
+    @if($s['count'] > 0)
+    <div class="bg-white border border-gray-200 rounded-xl p-4 mb-4 sm:mb-6 shadow-sm">
+        <div class="flex items-center justify-between gap-3 mb-2">
+            <div class="min-w-0">
+                <p class="text-[11px] text-gray-500 font-medium">Guardado no total</p>
+                <p class="text-lg sm:text-xl font-bold text-gray-900">
+                    R$ {{ number_format($s['totalCurrent'], 2, ',', '.') }}
+                    <span class="text-xs font-medium text-gray-400">de R$ {{ number_format($s['totalTarget'], 2, ',', '.') }}</span>
+                </p>
+            </div>
+            <div class="text-right flex-shrink-0">
+                <p class="text-xl sm:text-2xl font-bold {{ $s['pct'] >= 100 ? 'text-green-600' : 'text-primary' }}">{{ $s['pct'] }}%</p>
+                <p class="text-[10px] text-gray-400">{{ $s['completed'] }} de {{ $s['count'] }} {{ $s['count'] == 1 ? 'meta concluída' : 'metas concluídas' }}</p>
+            </div>
+        </div>
+        <div class="w-full bg-gray-200/70 rounded-full h-2.5 overflow-hidden">
+            <div class="{{ $s['pct'] >= 100 ? 'bg-green-500' : 'bg-primary' }} h-2.5 rounded-full transition-all duration-1000 ease-out" style="width: {{ $s['pct'] }}%"></div>
         </div>
     </div>
+    @endif
 
     {{-- GRID DE METAS --}}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -90,7 +100,8 @@ $deleteGoal = function ($id) {
             @php
                 $target = $goal->target > 0 ? $goal->target : 1;
                 $percent = min(100, ($goal->current / $target) * 100);
-                $remaining = max(0, $target - $goal->current);
+                $remaining = max(0, $goal->target - $goal->current);
+                $f = $goal->forecast();
 
                 if($percent >= 100) {
                     $barColor = 'bg-green-500';
@@ -108,7 +119,7 @@ $deleteGoal = function ($id) {
             <div class="bg-white border border-gray-200 rounded-xl p-3 sm:p-4 hover:shadow-md transition group relative flex flex-col h-full">
                 <div class="flex items-start gap-3 mb-3">
                     <div class="w-10 h-10 flex-shrink-0 {{ $percent >= 100 ? 'bg-green-50' : 'bg-blue-50' }} rounded-lg flex items-center justify-center">
-                        <i data-lucide="{{ $icon }}" class="w-5 h-5 {{ $iconColor }}"></i>
+                        <x-dynamic-component :component="'lucide-'.($icon)" class="w-5 h-5 {{ $iconColor }}" />
                     </div>
 
                     <div class="flex-1 min-w-0">
@@ -119,7 +130,7 @@ $deleteGoal = function ($id) {
                             </span>
                             @if($view === 'shared' && $goal->user_id !== auth()->id())
                                 <span class="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded flex items-center">
-                                    <i data-lucide="user" class="w-2.5 h-2.5 mr-0.5"></i> {{ $goal->user->name ?? 'User' }}
+                                    <x-lucide-user class="w-2.5 h-2.5 mr-0.5" /> {{ $goal->user->name ?? 'User' }}
                                 </span>
                             @endif
                         </div>
@@ -128,12 +139,12 @@ $deleteGoal = function ($id) {
                     @if($goal->user_id === auth()->id())
                         <div class="flex gap-0.5 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                             <button @click="Livewire.dispatch('edit-goal', { id: {{ $goal->id }} }); goalModalOpen = true"
-                                class="p-1.5 hover:bg-gray-100 rounded-md text-gray-400 hover:text-blue-600 transition">
-                                <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                                class="p-1.5 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center hover:bg-gray-100 rounded-md text-gray-400 hover:text-blue-600 transition">
+                                <x-lucide-pencil class="w-3.5 h-3.5" />
                             </button>
                             <button wire:click="setConfirmDelete({{ $goal->id }})"
-                                class="p-1.5 hover:bg-gray-100 rounded-md text-gray-400 hover:text-red-600 transition">
-                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                class="p-1.5 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center hover:bg-gray-100 rounded-md text-gray-400 hover:text-red-600 transition">
+                                <x-lucide-trash-2 class="w-3.5 h-3.5" />
                             </button>
                         </div>
                     @endif
@@ -154,21 +165,56 @@ $deleteGoal = function ($id) {
                         @if($remaining > 0)
                             <span class="text-blue-600 font-medium">Falta: R$ {{ number_format($remaining, 2, ',', '.') }}</span>
                         @else
-                            <span class="text-green-600 font-bold flex items-center"><i data-lucide="party-popper" class="w-2.5 h-2.5 mr-0.5"></i> Atingida!</span>
+                            <span class="text-green-600 font-bold flex items-center"><x-lucide-party-popper class="w-2.5 h-2.5 mr-0.5" /> Atingida!</span>
                         @endif
                     </div>
+
+                    {{-- Previsão + ritmo --}}
+                    @if($remaining > 0)
+                        @if($f['hasPlan'])
+                        <div class="rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-2 mb-2 space-y-1">
+                            <div class="flex items-center gap-1.5 text-[11px] text-gray-700">
+                                <x-lucide-calendar-clock class="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                                @if($f['overdue'])
+                                    <span class="text-red-600 font-medium">Prazo vencido — faltam R$ {{ number_format($f['neededMonthly'], 2, ',', '.') }}</span>
+                                @elseif($f['mode'] === 'monthly')
+                                    <span>Conclui em <b class="capitalize">{{ $f['forecastDate']->locale('pt_BR')->isoFormat('MMM/YY') }}</b> · {{ $f['monthsLeft'] }} {{ $f['monthsLeft'] == 1 ? 'mês' : 'meses' }}</span>
+                                @else
+                                    <span>Até <b class="capitalize">{{ $f['forecastDate']->locale('pt_BR')->isoFormat('MMM/YY') }}</b> · guarde <b>R$ {{ number_format($f['neededMonthly'], 2, ',', '.') }}</b>/mês</span>
+                                @endif
+                            </div>
+                            <div class="flex items-center justify-between text-[10px]">
+                                <span class="text-gray-500">Ritmo médio: <b class="text-gray-700">R$ {{ number_format($f['pace'], 2, ',', '.') }}</b>/mês</span>
+                                @if($f['onTrack'])
+                                    <span class="inline-flex items-center gap-0.5 text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full font-medium">
+                                        <x-lucide-trending-up class="w-2.5 h-2.5" /> No ritmo
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center gap-0.5 text-red-700 bg-red-100 px-1.5 py-0.5 rounded-full font-medium">
+                                        <x-lucide-trending-down class="w-2.5 h-2.5" /> Atrasado
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
+                        @elseif($goal->user_id === auth()->id())
+                        <button @click="Livewire.dispatch('edit-goal', { id: {{ $goal->id }} }); goalModalOpen = true"
+                            class="w-full mb-2 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-[11px] text-gray-500 hover:border-primary hover:text-primary transition flex items-center justify-center gap-1">
+                            <x-lucide-calendar-plus class="w-3.5 h-3.5" /> Definir prazo / quanto por mês
+                        </button>
+                        @endif
+                    @endif
 
                     <div class="space-y-1.5">
                         @if($remaining > 0)
                         <button wire:click="$dispatch('open-deposit-modal', { id: {{ $goal->id }}, name: @js($goal->name) })"
                             class="w-full py-2 bg-green-50 text-green-700 rounded-lg text-xs font-medium hover:bg-green-100 transition flex items-center justify-center">
-                            <i data-lucide="piggy-bank" class="w-3.5 h-3.5 mr-1.5"></i> Reservar Valor
+                            <x-lucide-piggy-bank class="w-3.5 h-3.5 mr-1.5" /> Reservar Valor
                         </button>
                         @endif
                         @if($goal->current > 0)
                         <button wire:click="$dispatch('open-withdraw-modal', { id: {{ $goal->id }}, name: @js($goal->name) })"
                             class="w-full py-2 bg-red-50 text-red-700 rounded-lg text-xs font-medium hover:bg-red-100 transition flex items-center justify-center">
-                            <i data-lucide="minus-circle" class="w-3.5 h-3.5 mr-1.5"></i> Retirar Valor
+                            <x-lucide-minus-circle class="w-3.5 h-3.5 mr-1.5" /> Retirar Valor
                         </button>
                         @endif
                     </div>
@@ -177,7 +223,7 @@ $deleteGoal = function ($id) {
         @empty
             <div class="col-span-full flex flex-col items-center justify-center py-10 text-gray-400 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
                 <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-3 shadow-sm">
-                    <i data-lucide="flag" class="w-6 h-6 opacity-40"></i>
+                    <x-lucide-flag class="w-6 h-6 opacity-40" />
                 </div>
                 <h3 class="font-semibold text-gray-600 text-sm">Nenhuma meta definida</h3>
                 <p class="text-xs mt-1 mb-3 text-gray-400">Defina objetivos para poupar dinheiro.</p>
@@ -196,7 +242,7 @@ $deleteGoal = function ($id) {
         <div class="bg-white rounded-xl shadow-xl p-5 w-full max-w-xs" @click.stop>
             <div class="text-center mb-4">
                 <div class="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <i data-lucide="trash-2" class="w-6 h-6"></i>
+                    <x-lucide-trash-2 class="w-6 h-6" />
                 </div>
                 <h3 class="text-sm font-bold text-gray-900">Excluir esta meta?</h3>
                 <p class="text-xs text-gray-500 mt-1">Esta ação não pode ser desfeita.</p>
