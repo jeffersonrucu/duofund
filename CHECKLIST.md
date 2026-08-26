@@ -110,3 +110,34 @@ Blocos 1 a 5 concluídos e em produção, menos os itens que o Jefferson decidiu
 **Números:** 47 → 143 testes · PHPStan nível 5 limpo · 12 commits · zero requisição externa.
 
 **Único item realmente em aberto:** documentar o `--no-dev` no deploy do `CLAUDE.md`.
+
+---
+
+## Repositório novo e esteira (2026-08-26)
+
+O force-push **não** removeu nada do GitHub: os commits pré-rewrite e o blob do
+`.env.prod` continuavam sendo servidos pela API por SHA. Confirmado na prática —
+`GET /repos/.../git/blobs/0aebb31e...` devolvia os 1205 bytes. Só o suporte do
+GitHub faz GC disso, então repo público com aquele histórico vazaria a senha do
+banco.
+
+**Solução:** repositório novo, com o histórico filtrado.
+
+- [x] `Studio-STG/duofund` → renomeado para `duofund-legacy`, **arquivado e privado**
+      (é ele que retém os objetos órfãos)
+- [x] `Studio-STG/duofund` recriado, 19 commits com histórico filtrado
+- [x] Removidos de **todo** o histórico: `.env.prod`, `public/error_log` (log de
+      produção com caminhos do host, versionado desde o commit inicial) e
+      `claude-notes.md`; caminho do servidor no `backup-db.sh` genericizado
+- [x] Auditoria final: **0 achados** em 527 objetos — varredura por senha do banco,
+      token MCP, chave SSH, `APP_KEY`, IP e usuário do servidor
+- [x] Esteira `.github/workflows/ci.yml`: testes + PHPStan no PHP 8.3, `vendor`
+      de produção no PHP 8.2 com `composer check-platform-reqs --no-dev`, rsync,
+      migrate, optimize e verificação de HTTP 200
+- [x] Secrets cadastrados (chave SSH, host, usuário e caminho ficam fora do código)
+- [x] Descrição, homepage e 15 topics
+- [x] README reescrito com 14 screenshots reais, geradas de **dados semeados**,
+      nunca de produção
+- [ ] **Tornar público** — a única ação que sobrou, e é irreversível na prática:
+      `gh api -X PATCH repos/Studio-STG/duofund -f visibility=public`
+- [ ] Definir licença (hoje sem arquivo = todos os direitos reservados)
