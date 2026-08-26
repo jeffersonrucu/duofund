@@ -57,8 +57,11 @@ jobs:
           cp .env.example .env
           php artisan key:generate
 
+      # O .env.example usa sqlite; a suíte precisa de MySQL por causa do
+      # FIELD() em listWishlist e dos índices compostos das migrations.
       - run: php artisan test
         env:
+          DB_CONNECTION: mysql
           DB_HOST: 127.0.0.1
           DB_PORT: 3306
           DB_DATABASE: testing
