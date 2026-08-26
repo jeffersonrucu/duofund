@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ScopedToView;
 use Illuminate\Database\Eloquent\Model;
 
 class WishlistItem extends Model
 {
+    use ScopedToView;
+
     protected $fillable = ['user_id', 'name', 'notes', 'url', 'price', 'priority', 'scope', 'status'];
 
     protected $casts = ['price' => 'decimal:2'];
