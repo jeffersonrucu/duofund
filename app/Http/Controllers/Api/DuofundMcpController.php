@@ -24,7 +24,7 @@ class DuofundMcpController extends Controller
         $date  = $this->validatedMonth($request);
 
         $totals = $summary->for($user, $scope, $date);
-        $budget = (float) Category::forView($user, $scope)->sum('limit');
+        $budget = (float) Category::forViewInMonth($user, $scope, $date)->sum('limit');
         $budgetExpense = $totals['expense'] - $totals['transfer'];
 
         return response()->json([
@@ -54,7 +54,7 @@ class DuofundMcpController extends Controller
             ->groupBy('category')
             ->pluck('total', 'category');
 
-        $categories = Category::forView($user, $scope)->orderBy('name')->get()->map(fn($c) => [
+        $categories = Category::forViewInMonth($user, $scope, $date)->map(fn($c) => [
             'id'        => $c->id,
             'name'      => $c->name,
             'limit'     => (float) $c->limit,

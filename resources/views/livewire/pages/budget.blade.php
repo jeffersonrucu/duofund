@@ -25,7 +25,7 @@ $data = computed(function() {
     $user = auth()->user();
     $date = Carbon::parse($this->currentMonth);
 
-    $categories = Category::forView($user, $this->view)->with('user')->orderBy('name')->get();
+    $categories = Category::forViewInMonth($user, $this->view, $date);
 
     $expenses = Transaction::forView($user, $this->view)
         ->inMonth($date)

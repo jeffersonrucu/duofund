@@ -8,7 +8,9 @@ state([
     'name' => '',
     'limit' => '',
     'scope' => 'personal',
-    'isEditing' => false
+    'isEditing' => false,
+    // Alcance da mudança de limite ao editar: month | forward | all
+    'applyTo' => 'forward'
 ]);
 
 // Abre modal para criação, recebendo o escopo atual
@@ -25,6 +27,7 @@ on(['edit-category' => function($id, $name, $limit, $scope) {
     $this->limit = $limit;
     $this->scope = $scope;
     $this->isEditing = true;
+    $this->applyTo = 'forward';
 }]);
 
 $save = function() {
@@ -57,9 +60,20 @@ $save = function() {
 
             $cat->update([
                 'name' => $this->name,
-                'limit' => $this->limit ?: 0,
                 'scope' => $this->scope
             ]);
+
+            // Limite muda como uma recorrência: só neste mês, daqui em diante ou em todos
+            $month = \Carbon\Carbon::parse(session('current_month', now()->startOfMonth()->format('Y-m-d')));
+            $newLimit = (float) ($this->limit ?: 0);
+
+            if ($newLimit !== $cat->limitFor($month)) {
+                match ($this->applyTo) {
+                    'month' => $cat->setLimitForMonth($month, $newLimit),
+                    'all'   => $cat->setLimitForAll($newLimit),
+                    default => $cat->setLimitFrom($month, $newLimit),
+                };
+            }
 
             // Se o nome mudou, atualiza todas as transações vinculadas a este nome
             if ($oldName !== $this->name) {
@@ -128,6 +142,31 @@ $save = function() {
             <x-ui.currency-input model="limit" placeholder="0 para sem limite">
                 <x-slot:label>Limite mensal (R$) <span class="font-normal text-gray-400">— opcional</span></x-slot:label>
             </x-ui.currency-input>
+
+            @if($isEditing)
+                @php
+                    $mesAtual = \Carbon\Carbon::parse(session('current_month', now()->startOfMonth()->format('Y-m-d')))
+                        ->locale('pt_BR')->translatedFormat('F');
+                    $opcoes = [
+                        'month'   => 'Só em ' . $mesAtual,
+                        'forward' => 'De ' . $mesAtual . ' em diante',
+                        'all'     => 'Todos os meses',
+                    ];
+                @endphp
+                <div>
+                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Aplicar o novo limite</label>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        @foreach($opcoes as $valor => $rotulo)
+                            <button type="button" wire:click="$set('applyTo', '{{ $valor }}')"
+                                class="py-2 px-1 text-[11px] leading-tight rounded-lg border font-medium transition
+                                    {{ $applyTo === $valor ? 'border-primary bg-blue-50 text-primary' : 'border-gray-200 text-gray-600 hover:bg-gray-50' }}">
+                                {{ $rotulo }}
+                            </button>
+                        @endforeach
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-1">Meses anteriores mantêm o limite que valia neles.</p>
+                </div>
+            @endif
 
             <x-ui.button type="submit">
                 {{ $isEditing ? 'Salvar' : 'Criar Categoria' }}

@@ -36,7 +36,7 @@ $summary = computed(function() {
 
     $queryTx = Transaction::forView($user, $this->view)->inMonth($targetDate);
 
-    $cats = Category::forView($user, $this->view)->orderBy('name')->get();
+    $cats = Category::forViewInMonth($user, $this->view, $targetDate);
     $budgetTotal = $cats->sum('limit');
 
     $catUsage = (clone $queryTx)->where('type', 'expense')
