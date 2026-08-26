@@ -73,6 +73,17 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Enquanto não há SMTP em produção, o mailer 'log' escreve aqui.
+        // Nível fixo em debug para o link de reset de senha não sumir
+        // quando o LOG_LEVEL do app for elevado.
+        'mail' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/mail.log'),
+            'level' => 'debug',
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

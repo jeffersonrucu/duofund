@@ -1,0 +1,21 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 5
+
+    paths:
+        - app
+        - config
+        - database
+        - routes
+
+    # `tests` fica fora: o PHPStan não resolve o `$this` das closures do Pest
+    # e gera só ruído (75 falsos positivos).
+
+    ignoreErrors:
+        # Os traits só são usados por componentes Volt (.blade.php), que o
+        # PHPStan não analisa — daí ele os considerar órfãos.
+        -
+            identifier: trait.unused
+            path: app/Livewire/Concerns/*
