@@ -6,6 +6,8 @@ on:
     # Mudança só de documentação não precisa reimplantar
     paths-ignore: ['**.md', 'docs/**']
   pull_request:
+  # Disparo manual (gh workflow run ci.yml) — útil quando o push não gera run
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -75,7 +77,7 @@ jobs:
   deploy:
     name: Deploy em produção
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment: production
 
