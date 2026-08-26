@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [master]
+    # Mudança só de documentação não precisa reimplantar
+    paths-ignore: ['**.md', 'docs/**']
   pull_request:
 
 concurrency:
