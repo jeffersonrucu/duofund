@@ -13,7 +13,7 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->string('name');
             $table->text('notes')->nullable();
-            $table->string('url')->nullable();
+            $table->text('url')->nullable();
             $table->decimal('price', 12, 2);
             $table->string('priority')->default('medium'); // high, medium, low
             $table->string('scope')->default('personal');  // personal, shared

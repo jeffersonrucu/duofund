@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    // API MCP (env() direto no middleware quebraria com config:cache)
+    'duofund_mcp' => [
+        'token' => env('DUOFUND_MCP_TOKEN'),
+        'user_id' => env('DUOFUND_MCP_USER_ID', 1),
+    ],
+
 ];

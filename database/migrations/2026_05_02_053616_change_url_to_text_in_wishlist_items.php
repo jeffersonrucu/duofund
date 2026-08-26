@@ -11,6 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Timestamp desta migration é ANTERIOR à create_wishlist_items (2026_05_02_120000):
+        // em banco zerado a tabela ainda não existe aqui — a create já usa text('url').
+        if (! Schema::hasTable('wishlist_items')) {
+            return;
+        }
+
         Schema::table('wishlist_items', function (Blueprint $table) {
             $table->text('url')->nullable()->change();
         });
