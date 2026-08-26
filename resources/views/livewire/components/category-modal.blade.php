@@ -28,6 +28,8 @@ on(['edit-category' => function($id, $name, $limit, $scope) {
 }]);
 
 $save = function() {
+    $this->limit = \App\Support\Money::toDecimal($this->limit) ?? '';
+
     $this->validate([
         'name' => 'required|string|max:100',
         'limit' => 'nullable|numeric|min:0',
@@ -37,7 +39,7 @@ $save = function() {
     if ($this->isEditing && $this->id) {
         // Atualizar
         $cat = Category::find($this->id);
-        if ($cat && ($cat->user_id === auth()->id() || in_array($cat->user_id, auth()->user()->getFamilyUserIds()))) {
+        if ($cat && $cat->manageableBy(auth()->user())) {
             $oldName = $cat->name; // Guarda o nome antigo
 
             $cat->update([
@@ -75,19 +77,24 @@ $save = function() {
     $this->dispatch('close-modal-category');
     $this->dispatch('notify', $msg ?? 'Sucesso');
     // Recarrega a página para atualizar os dados visuais
-    $this->redirect(request()->header('Referer'), navigate: true);
+    $this->redirect(request()->header('Referer') ?: route('dashboard'), navigate: true);
 };
 ?>
 
-<div class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 sm:p-4"
+<div class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 sm:p-4" role="dialog" aria-modal="true"
      :class="{ 'active': categoryModalOpen }" @click="categoryModalOpen = false">
-    <div class="modal-content bg-white w-full h-full sm:h-auto sm:max-w-sm sm:rounded-xl shadow-2xl sm:max-h-[85vh] overflow-y-auto" @click.stop>
-        
-        <div class="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex justify-between items-center z-10">
-            <h3 class="text-base font-semibold text-gray-900">{{ $isEditing ? 'Editar' : 'Nova' }} Categoria</h3>
-            <button class="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100" @click="categoryModalOpen = false">
-                <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
+    <div class="modal-content bg-white w-full h-full sm:h-auto sm:max-w-sm sm:rounded-xl shadow-2xl sm:max-h-[85vh] overflow-y-auto"
+         x-data="sheet(() => categoryModalOpen = false)" :style="sheetStyle" @click.stop>
+
+        <div class="sticky top-0 bg-white z-10"
+             x-on:touchstart.passive="start($event)" x-on:touchmove="move($event)" x-on:touchend="end()">
+            <div class="sm:hidden flex justify-center pt-2"><span class="w-10 h-1 bg-gray-300 rounded-full"></span></div>
+            <div class="border-b border-gray-100 px-4 py-3 flex justify-between items-center">
+                <h3 class="text-base font-semibold text-gray-900">{{ $isEditing ? 'Editar' : 'Nova' }} Categoria</h3>
+                <button class="p-2.5 sm:p-1.5 -mr-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100" @click="categoryModalOpen = false" aria-label="Fechar">
+                    <x-lucide-x class="w-5 h-5" />
+                </button>
+            </div>
         </div>
 
         <form wire:submit="save" class="p-4 space-y-3">
@@ -95,35 +102,23 @@ $save = function() {
             {{-- Toggle de escopo --}}
             <div>
                 <label class="block text-[11px] font-medium text-gray-500 mb-1">Visibilidade</label>
-                <div class="flex bg-gray-100 p-0.5 rounded-lg">
-                    <button type="button" wire:click="$set('scope', 'personal')"
-                        class="flex-1 py-1.5 text-[11px] font-medium rounded transition {{ $scope === 'personal' ? 'bg-white shadow text-gray-800' : 'text-gray-500' }}">
-                        Só eu
-                    </button>
-                    <button type="button" wire:click="$set('scope', 'shared')"
-                        class="flex-1 py-1.5 text-[11px] font-medium rounded transition {{ $scope === 'shared' ? 'bg-white shadow text-purple-600' : 'text-gray-500' }}">
-                        Casal
-                    </button>
-                </div>
+                <x-ui.scope-toggle :value="$scope" />
             </div>
 
             <div>
-                <label class="block text-[11px] font-medium text-gray-500 mb-1">Nome</label>
-                <input type="text" wire:model="name" placeholder="Ex: Moradia, Lazer..." 
+                <label for="category-name" class="block text-[11px] font-medium text-gray-500 mb-1">Nome</label>
+                <input id="category-name" type="text" wire:model="name" placeholder="Ex: Moradia, Lazer..."
                     class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
                 @error('name') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
             </div>
 
-            <div>
-                <label class="block text-[11px] font-medium text-gray-500 mb-1">Limite mensal (R$) <span class="font-normal text-gray-400">— opcional</span></label>
-                <input type="number" step="0.01" min="0" wire:model="limit" placeholder="0 para sem limite"
-                    class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
-                @error('limit') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
-            </div>
+            <x-ui.currency-input model="limit" placeholder="0 para sem limite">
+                <x-slot:label>Limite mensal (R$) <span class="font-normal text-gray-400">— opcional</span></x-slot:label>
+            </x-ui.currency-input>
 
-            <button type="submit" class="w-full py-2.5 rounded-lg font-semibold text-sm text-white bg-primary active:bg-blue-700 transition">
+            <x-ui.button type="submit">
                 {{ $isEditing ? 'Salvar' : 'Criar Categoria' }}
-            </button>
+            </x-ui.button>
         </form>
     </div>
 </div>

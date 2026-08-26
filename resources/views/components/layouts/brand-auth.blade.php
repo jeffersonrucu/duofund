@@ -7,48 +7,10 @@
     <title>{{ $title ?? 'DuoFund — Finanças a Dois' }}</title>
     @include('partials.favicon')
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#2674D9',
-                        secondary: '#4184DD',
-                        accent: '#E2B93B',
-                    },
-                    fontFamily: {
-                        sans: ['DM Sans', 'sans-serif'],
-                        display: ['Fraunces', 'serif'],
-                    }
-                }
-            }
-        }
-    </script>
 
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    @vite('resources/css/duofund.css')
 
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap');
-
-        body { font-family: 'DM Sans', sans-serif; }
-        [x-cloak] { display: none !important; }
-
-        /* Entrada escalonada */
-        @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-        .rise { opacity: 0; animation: rise 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-
-        /* Brilho pulsante suave no painel da marca */
-        @keyframes drift { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(20px,-18px) scale(1.08); } }
-        .drift { animation: drift 14s ease-in-out infinite; }
-
-        /* Textura granulada */
-        .grain::before {
-            content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.06;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 250 250' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-        }
-    </style>
+    @vite('resources/js/landing.js')
 </head>
 <body class="min-h-screen bg-[#eef2f7] text-gray-900 antialiased">
     <div class="min-h-screen lg:grid lg:grid-cols-[1.05fr_1fr] xl:grid-cols-2">
@@ -96,7 +58,7 @@
                     ] as $i => $b)
                         <div class="flex items-start gap-3.5 rise" style="animation-delay:{{ 0.4 + $i * 0.1 }}s">
                             <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/12 ring-1 ring-white/15 backdrop-blur-sm">
-                                <i data-lucide="{{ $b[0] }}" class="h-4 w-4 text-accent"></i>
+                                <x-dynamic-component :component="'lucide-'.($b[0])" class="h-4 w-4 text-accent" />
                             </div>
                             <div>
                                 <p class="font-semibold leading-tight">{{ $b[1] }}</p>
@@ -132,11 +94,5 @@
         </main>
     </div>
 
-    <script>
-        // Converte os ícones ANTES do Alpine inicializar (Alpine é `defer`),
-        // assim os atributos x-show/@click/:class são copiados para o <svg> e
-        // permanecem reativos após a troca <i> → <svg>.
-        if (window.lucide) lucide.createIcons();
-    </script>
 </body>
 </html>

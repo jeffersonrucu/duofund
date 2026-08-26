@@ -25,7 +25,7 @@ new class extends Component {
 
     <button type="button" @click="open = true"
             class="mt-4 inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100">
-        <i data-lucide="trash-2" class="h-4 w-4"></i> Excluir conta
+        <x-lucide-trash-2 class="h-4 w-4" /> Excluir conta
     </button>
 
     {{-- Modal de confirmação --}}
@@ -34,7 +34,7 @@ new class extends Component {
         <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" @click.stop>
             <div class="mb-4 flex items-start gap-3">
                 <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
-                    <i data-lucide="alert-triangle" class="h-5 w-5"></i>
+                    <x-lucide-alert-triangle class="h-5 w-5" />
                 </div>
                 <div>
                     <h3 class="text-base font-bold text-gray-900">Excluir sua conta?</h3>

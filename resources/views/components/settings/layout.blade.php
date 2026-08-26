@@ -19,7 +19,7 @@
                 @foreach($tabs as $tab)
                     <a href="{{ route($tab['route']) }}" wire:navigate
                        class="flex items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition {{ request()->routeIs($tab['route']) ? 'bg-primary text-white shadow' : 'text-gray-600 hover:bg-gray-50' }}">
-                        <i data-lucide="{{ $tab['icon'] }}" class="h-4 w-4"></i> {{ $tab['label'] }}
+                        <x-dynamic-component :component="'lucide-'.($tab['icon'])" class="h-4 w-4" /> {{ $tab['label'] }}
                     </a>
                 @endforeach
             </div>

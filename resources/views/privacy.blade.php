@@ -7,25 +7,11 @@
     <meta name="description" content="Como o DuoFund coleta, usa e protege os dados financeiros do casal.">
     @include('partials.favicon')
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: { extend: {
-                colors: { primary: '#2674D9', secondary: '#4184DD', accent: '#E2B93B' },
-                fontFamily: { sans: ['DM Sans','sans-serif'], display: ['Fraunces','serif'] }
-            } }
-        }
-    </script>
 
-    <script src="https://unpkg.com/lucide@latest"></script>
+    @vite('resources/css/duofund.css')
+
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Fraunces:opsz,ital,wght@9..144,0,400;9..144,0,500;9..144,0,600;9..144,1,500;9..144,1,600&display=swap');
-        body { font-family: 'DM Sans', sans-serif; }
-        .grain::before {
-            content:''; position:absolute; inset:0; pointer-events:none; opacity:.05;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 250 250' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-        }
         /* Âncoras não ficam escondidas sob o header fixo */
         .doc h2 { scroll-margin-top: 6rem; }
         html { scroll-behavior: smooth; }
@@ -43,7 +29,7 @@
                 <span class="text-lg font-bold tracking-tight"><span class="text-primary">Duo</span>Fund</span>
             </a>
             <a href="{{ url('/') }}" class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-gray-600 transition hover:text-primary">
-                <i data-lucide="arrow-left" class="h-4 w-4"></i> Voltar
+                <x-lucide-arrow-left class="h-4 w-4" /> Voltar
             </a>
         </nav>
     </header>
@@ -53,7 +39,7 @@
         <div class="absolute -top-24 -left-20 h-80 w-80 rounded-full bg-secondary/30 blur-3xl"></div>
         <div class="relative mx-auto max-w-5xl px-5 py-16 sm:px-8 sm:py-20">
             <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-xs font-semibold backdrop-blur-sm">
-                <i data-lucide="shield-check" class="h-3.5 w-3.5 text-accent"></i> Sua privacidade
+                <x-lucide-shield-check class="h-3.5 w-3.5 text-accent" /> Sua privacidade
             </div>
             <h1 class="font-display text-4xl font-semibold tracking-tight sm:text-5xl">Política de Privacidade</h1>
             <p class="mt-3 max-w-xl text-blue-100/90">
@@ -202,6 +188,5 @@
         </div>
     </footer>
 
-    <script>if (window.lucide) lucide.createIcons();</script>
 </body>
 </html>

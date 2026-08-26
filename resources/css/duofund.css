@@ -1,0 +1,63 @@
+@import 'tailwindcss';
+
+/* Fontes self-hosted (antes vinham do Google Fonts em 3 layouts). */
+@import '@fontsource-variable/dm-sans';
+@import '@fontsource-variable/fraunces';
+@import '@fontsource-variable/fraunces/wght-italic.css';
+
+@source '../views';
+
+/* Tema do app (antes vivia no tailwind.config inline do CDN) */
+@theme {
+    --font-sans: 'DM Sans Variable', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Fraunces Variable', 'Fraunces', serif;
+
+    --color-primary: #2674D9;
+    --color-secondary: #4184DD;
+    --color-accent: #E2B93B;
+}
+
+body {
+    font-family: var(--font-sans);
+    background-color: #eef2f7;
+}
+
+/* Mobile polish: sem flash cinza no toque, sem delay de 300ms */
+* { -webkit-tap-highlight-color: transparent; }
+button, a, label, select, summary, [role="button"] { touch-action: manipulation; }
+
+.modal-overlay { visibility: hidden; opacity: 0; transition: opacity 0.3s, visibility 0.3s; }
+.modal-overlay.active { visibility: visible; opacity: 1; }
+.modal-content { transform: translateY(20px); transition: transform 0.3s ease-out; overscroll-behavior: contain; }
+.modal-overlay.active .modal-content { transform: translateY(0); }
+
+.nav-btn { color: #6b7280; background-color: transparent; padding: 7px 12px; border-radius: 0.625rem; transition: background-color 0.15s, color 0.15s; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.nav-btn.active { color: #2674D9 !important; background-color: #dbeafe !important; font-weight: 600; }
+/* #1D5CB0 sobre #eff6ff ≈ 5.5:1 (WCAG AA) */
+.nav-btn:hover:not(.active) { color: #1D5CB0; background-color: #eff6ff; }
+
+.safe-area-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+[x-cloak] { display: none !important; }
+
+@keyframes pulse-ring {
+    0% { transform: scale(0.88); opacity: 1; }
+    50% { transform: scale(1.04); opacity: 0.5; }
+    100% { transform: scale(0.88); opacity: 1; }
+}
+.loading-pulse { animation: pulse-ring 1.4s ease-in-out infinite; }
+
+/* ── Marca (landing / auth) ─────────────────────────────── */
+
+/* Entrada escalonada */
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+.rise { opacity: 0; animation: rise 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+/* Brilho pulsante suave no painel da marca */
+@keyframes drift { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(20px,-18px) scale(1.08); } }
+.drift { animation: drift 14s ease-in-out infinite; }
+
+/* Textura granulada */
+.grain::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.06;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 250 250' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}

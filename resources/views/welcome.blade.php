@@ -7,41 +7,19 @@
     <meta name="description" content="O app de finanças para casais. Organizem juntos o dinheiro de vocês — com transparência sobre o que é seu e o que é compartilhado.">
     @include('partials.favicon')
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: { extend: {
-                colors: { primary: '#2674D9', secondary: '#4184DD', accent: '#E2B93B' },
-                fontFamily: { sans: ['DM Sans','sans-serif'], display: ['Fraunces','serif'] }
-            } }
-        }
-    </script>
 
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    @vite('resources/css/duofund.css')
+
+    @vite('resources/js/landing.js')
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Fraunces:opsz,ital,wght@9..144,0,400;9..144,0,500;9..144,0,600;9..144,1,500;9..144,1,600&display=swap');
-        body { font-family: 'DM Sans', sans-serif; }
-        [x-cloak] { display: none !important; }
         html { scroll-behavior: smooth; }
-
-        @keyframes rise { from { opacity:0; transform: translateY(18px); } to { opacity:1; transform: translateY(0); } }
-        .rise { opacity:0; animation: rise .7s cubic-bezier(.16,1,.3,1) forwards; }
 
         @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
         .float { animation: float 6s ease-in-out infinite; }
 
-        @keyframes drift { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(24px,-20px) scale(1.1); } }
-        .drift { animation: drift 16s ease-in-out infinite; }
-
         .reveal { opacity:0; transform: translateY(28px); transition: opacity .7s cubic-bezier(.16,1,.3,1), transform .7s cubic-bezier(.16,1,.3,1); }
         .reveal.in { opacity:1; transform: none; }
-
-        .grain::before {
-            content:''; position:absolute; inset:0; pointer-events:none; opacity:.05;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 250 250' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-        }
     </style>
 </head>
 <body class="bg-[#eef2f7] text-gray-900 antialiased">
@@ -68,7 +46,7 @@
                 @auth
                     <a href="{{ route('dashboard') }}"
                        class="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md shadow-primary/25 transition hover:bg-secondary">
-                        Ir para o painel <i data-lucide="arrow-right" class="h-4 w-4"></i>
+                        Ir para o painel <x-lucide-arrow-right class="h-4 w-4" />
                     </a>
                 @else
                     <a href="{{ route('login') }}" class="hidden rounded-lg px-4 py-2 text-sm font-semibold text-gray-600 transition hover:text-primary sm:inline-block">Entrar</a>
@@ -78,8 +56,8 @@
                     </a>
                 @endauth
                 <button @click="open = !open" class="md:hidden p-2 text-gray-600" aria-label="Menu">
-                    <i x-show="!open" data-lucide="menu" class="h-5 w-5"></i>
-                    <i x-show="open" x-cloak data-lucide="x" class="h-5 w-5"></i>
+                    <x-lucide-menu x-show="!open" class="h-5 w-5" />
+                    <x-lucide-x x-show="open" x-cloak class="h-5 w-5" />
                 </button>
             </div>
         </nav>
@@ -127,18 +105,18 @@
                     <a href="{{ auth()->check() ? route('dashboard') : route('register') }}"
                        class="group flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-primary/30 transition hover:bg-secondary hover:shadow-primary/40 active:scale-[.99]">
                         {{ auth()->check() ? 'Ir para o painel' : 'Começar de graça' }}
-                        <i data-lucide="arrow-right" class="h-4 w-4 transition-transform group-hover:translate-x-0.5"></i>
+                        <x-lucide-arrow-right class="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                     </a>
                     <a href="#como-funciona"
                        class="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-6 py-3.5 text-sm font-semibold text-gray-700 transition hover:border-gray-300 hover:bg-gray-50">
-                        <i data-lucide="play-circle" class="h-4 w-4 text-primary"></i>
+                        <x-lucide-play-circle class="h-4 w-4 text-primary" />
                         Ver como funciona
                     </a>
                 </div>
 
                 <div class="rise mt-7 flex items-center gap-5 text-xs text-gray-500" style="animation-delay:.45s">
-                    <span class="flex items-center gap-1.5"><i data-lucide="check" class="h-3.5 w-3.5 text-green-500"></i> Grátis para começar</span>
-                    <span class="flex items-center gap-1.5"><i data-lucide="check" class="h-3.5 w-3.5 text-green-500"></i> Sem cartão</span>
+                    <span class="flex items-center gap-1.5"><x-lucide-check class="h-3.5 w-3.5 text-green-500" /> Grátis para começar</span>
+                    <span class="flex items-center gap-1.5"><x-lucide-check class="h-3.5 w-3.5 text-green-500" /> Sem cartão</span>
                 </div>
             </div>
 
@@ -177,7 +155,7 @@
                     {{-- Card flutuante: meta --}}
                     <div class="float absolute -bottom-6 -left-6 w-44 rounded-2xl border border-gray-100 bg-white p-3.5 shadow-xl" style="animation-delay:-3s">
                         <div class="flex items-center gap-2">
-                            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50"><i data-lucide="target" class="h-4 w-4 text-orange-500"></i></div>
+                            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50"><x-lucide-target class="h-4 w-4 text-orange-500" /></div>
                             <div><p class="text-[11px] font-bold leading-tight">Viagem Europa</p><p class="text-[9px] text-gray-400">34% guardado</p></div>
                         </div>
                         <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100"><div class="h-1.5 rounded-full bg-orange-400" style="width:34%"></div></div>
@@ -228,7 +206,7 @@
             @foreach($features as $i => $f)
                 <div class="reveal group rounded-2xl border border-gray-100 bg-white p-6 transition hover:-translate-y-1 hover:shadow-xl hover:shadow-gray-200/60" style="transition-delay: {{ $i * 60 }}ms">
                     <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl {{ $tones[$f[2]] }} transition group-hover:scale-105">
-                        <i data-lucide="{{ $f[0] }}" class="h-6 w-6"></i>
+                        <x-dynamic-component :component="'lucide-'.($f[0])" class="h-6 w-6" />
                     </div>
                     <h3 class="text-lg font-bold text-gray-900">{{ $f[1] }}</h3>
                     <p class="mt-2 text-sm leading-relaxed text-gray-600">{{ $f[3] }}</p>
@@ -251,12 +229,12 @@
 
             <div class="grid gap-5 md:grid-cols-2">
                 <div class="reveal rounded-3xl border border-white/15 bg-white/10 p-7 backdrop-blur-sm">
-                    <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-white/15"><i data-lucide="user" class="h-6 w-6"></i></div>
+                    <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-white/15"><x-lucide-user class="h-6 w-6" /></div>
                     <h3 class="text-xl font-bold">Meu Dinheiro</h3>
                     <p class="mt-2 text-sm leading-relaxed text-blue-100/80">Suas finanças pessoais — só você vê. Salário, gastos individuais e metas privadas ficam reservados.</p>
                 </div>
                 <div class="reveal rounded-3xl border border-white/15 bg-white/10 p-7 backdrop-blur-sm" style="transition-delay:80ms">
-                    <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-accent/25"><i data-lucide="users" class="h-6 w-6 text-accent"></i></div>
+                    <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-accent/25"><x-lucide-users class="h-6 w-6 text-accent" /></div>
                     <h3 class="text-xl font-bold">Nosso Dinheiro</h3>
                     <p class="mt-2 text-sm leading-relaxed text-blue-100/80">As finanças do casal — ambos veem e contribuem. Contas da casa, metas conjuntas e desejos compartilhados.</p>
                 </div>
@@ -282,7 +260,7 @@
             @foreach($steps as $i => $s)
                 <div class="reveal relative rounded-2xl border border-gray-100 bg-white p-7" style="transition-delay: {{ $i * 80 }}ms">
                     <span class="absolute right-6 top-5 font-display text-5xl font-600 text-gray-100">{{ $s[0] }}</span>
-                    <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary"><i data-lucide="{{ $s[1] }}" class="h-6 w-6"></i></div>
+                    <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary"><x-dynamic-component :component="'lucide-'.($s[1])" class="h-6 w-6" /></div>
                     <h3 class="text-lg font-bold">{{ $s[2] }}</h3>
                     <p class="mt-2 text-sm leading-relaxed text-gray-600">{{ $s[3] }}</p>
                 </div>
@@ -305,7 +283,7 @@
                 <a href="{{ auth()->check() ? route('dashboard') : route('register') }}"
                    class="group mt-8 inline-flex items-center justify-center gap-2 rounded-xl bg-white px-7 py-3.5 text-sm font-semibold text-gray-900 shadow-lg transition hover:bg-gray-100 active:scale-[.99]">
                     {{ auth()->check() ? 'Ir para o painel' : 'Criar conta grátis' }}
-                    <i data-lucide="arrow-right" class="h-4 w-4 transition-transform group-hover:translate-x-0.5"></i>
+                    <x-lucide-arrow-right class="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </a>
             </div>
         </div>
@@ -334,9 +312,6 @@
     @include('partials.install-pwa', ['offset' => 'bottom-4'])
 
     <script>
-        // Lucide antes do Alpine (defer), para preservar x-show/@click nos <svg>
-        if (window.lucide) lucide.createIcons();
-
         // Reveal on scroll
         const io = new IntersectionObserver((entries) => {
             entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });

@@ -23,7 +23,7 @@
                 Instalar
             </button>
             <button @click="dismiss()" class="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600" aria-label="Dispensar">
-                <i data-lucide="x" class="h-4 w-4"></i>
+                <x-lucide-x class="h-4 w-4" />
             </button>
         </div>
     </div>
@@ -37,7 +37,7 @@
              x-transition:enter="transition ease-out duration-250" x-transition:enter-start="translate-y-full sm:translate-y-4 sm:opacity-0" x-transition:enter-end="translate-y-0 sm:opacity-100">
             <div class="mb-4 flex items-center justify-between">
                 <h3 class="text-base font-bold text-gray-900">Adicionar à tela inicial</h3>
-                <button @click="modal = false" class="p-1 text-gray-400 hover:text-gray-600"><i data-lucide="x" class="h-5 w-5"></i></button>
+                <button @click="modal = false" class="p-1 text-gray-400 hover:text-gray-600"><x-lucide-x class="h-5 w-5" /></button>
             </div>
 
             {{-- iOS --}}
@@ -45,18 +45,18 @@
                 <div class="flex items-start gap-3">
                     <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">1</span>
                     <p class="text-sm text-gray-600">Toque no menu
-                        <span class="mx-0.5 inline-flex h-5 w-5 -translate-y-0.5 items-center justify-center rounded bg-gray-100 align-middle"><i data-lucide="more-horizontal" class="h-3 w-3 text-primary"></i></span>
+                        <span class="mx-0.5 inline-flex h-5 w-5 -translate-y-0.5 items-center justify-center rounded bg-gray-100 align-middle"><x-lucide-more-horizontal class="h-3 w-3 text-primary" /></span>
                         na barra do navegador.</p>
                 </div>
                 <div class="flex items-start gap-3">
                     <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">2</span>
                     <p class="text-sm text-gray-600">Toque em <strong>Compartilhar</strong>
-                        <span class="mx-0.5 inline-flex h-5 w-5 -translate-y-0.5 items-center justify-center rounded bg-gray-100 align-middle"><i data-lucide="share" class="h-3 w-3 text-primary"></i></span>.</p>
+                        <span class="mx-0.5 inline-flex h-5 w-5 -translate-y-0.5 items-center justify-center rounded bg-gray-100 align-middle"><x-lucide-share class="h-3 w-3 text-primary" /></span>.</p>
                 </div>
                 <div class="flex items-start gap-3">
                     <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">3</span>
                     <p class="text-sm text-gray-600">Toque em <strong>Mais</strong>
-                        <span class="mx-0.5 inline-flex h-5 w-5 -translate-y-0.5 items-center justify-center rounded bg-gray-100 align-middle"><i data-lucide="more-horizontal" class="h-3 w-3 text-primary"></i></span>
+                        <span class="mx-0.5 inline-flex h-5 w-5 -translate-y-0.5 items-center justify-center rounded bg-gray-100 align-middle"><x-lucide-more-horizontal class="h-3 w-3 text-primary" /></span>
                         e escolha <strong>“Adicionar à Tela de Início”</strong>.</p>
                 </div>
                 <div class="flex items-start gap-3">
@@ -70,7 +70,7 @@
                 <div class="flex items-start gap-3">
                     <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">1</span>
                     <p class="text-sm text-gray-600">Toque no menu
-                        <span class="mx-0.5 inline-flex h-5 w-5 -translate-y-0.5 items-center justify-center rounded bg-gray-100 align-middle"><i data-lucide="more-vertical" class="h-3 w-3 text-primary"></i></span>
+                        <span class="mx-0.5 inline-flex h-5 w-5 -translate-y-0.5 items-center justify-center rounded bg-gray-100 align-middle"><x-lucide-more-vertical class="h-3 w-3 text-primary" /></span>
                         no canto do Chrome.</p>
                 </div>
                 <div class="flex items-start gap-3">
@@ -116,7 +116,7 @@
 
                 if ((isMobile || this.ios) && !standalone && !installed && !shownRecently) {
                     lsSet('a2hs_last_v2', String(Date.now())); // marca a exibição de hoje
-                    setTimeout(() => { this.show = true; if (window.lucide) lucide.createIcons(); }, 1200);
+                    setTimeout(() => { this.show = true; }, 1200);
                 }
             },
             async trigger() {
@@ -127,7 +127,6 @@
                     this.dismiss();
                 } else {                        // iOS ou Android sem prompt: passo a passo
                     this.modal = true;
-                    this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
                 }
             },
             dismiss() {

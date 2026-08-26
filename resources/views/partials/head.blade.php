@@ -11,8 +11,6 @@
 <link rel="manifest" href="/site.webmanifest">
 <meta name="theme-color" content="#2674D9">
 
-<link rel="preconnect" href="https://fonts.bunny.net">
-<link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
 
-@vite(['resources/css/app.css', 'resources/js/app.js'])
+@vite('resources/css/app.css')
 @fluxAppearance

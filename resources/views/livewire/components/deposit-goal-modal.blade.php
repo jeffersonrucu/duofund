@@ -45,13 +45,15 @@ on(['open-withdraw-modal' => function($id, $name) {
 }]);
 
 $save = function() {
+    $this->amount = \App\Support\Money::toDecimal($this->amount) ?? '';
+
     $this->validate([
         'amount' => 'required|numeric|min:0.01',
         'date' => 'required|date',
     ]);
 
     $goal = Goal::find($this->goal_id);
-    if (!$goal) {
+    if (!$goal || !$goal->manageableBy(auth()->user())) {
         $this->dispatch('notify', 'Meta não encontrada.');
         return;
     }
@@ -87,30 +89,34 @@ $save = function() {
         $this->dispatch('notify', 'Valor reservado para a meta!');
     }
 
-    $this->redirect(request()->header('Referer'), navigate: true);
+    $this->redirect(request()->header('Referer') ?: route('dashboard'), navigate: true);
 };
 
 ?>
 
-<div class="modal-overlay fixed inset-0 z-50 flex sm:items-center sm:justify-center bg-gray-900/50 backdrop-blur-sm"
+<div class="modal-overlay fixed inset-0 z-50 flex sm:items-center sm:justify-center bg-gray-900/50 backdrop-blur-sm" role="dialog" aria-modal="true"
      :class="{ 'active': $wire.modalOpen }"
      x-show="$wire.modalOpen"
      x-cloak
      x-transition.opacity
      @click="$wire.set('modalOpen', false)">
 
-    <div class="bg-white w-full h-full sm:h-auto sm:max-w-sm sm:rounded-xl shadow-2xl sm:mx-4 flex flex-col" @click.stop>
-        <!-- Header -->
-        <div class="flex justify-between items-center px-4 py-3 border-b border-gray-100">
-            <div>
-                <h3 class="text-base font-semibold text-gray-800">
-                    {{ $mode === 'deposit' ? 'Reservar para Meta' : 'Retirar da Meta' }}
-                </h3>
-                <p class="text-[11px] text-gray-500">{{ $goal_name }}</p>
+    <div class="bg-white w-full h-full sm:h-auto sm:max-w-sm sm:rounded-xl shadow-2xl sm:mx-4 flex flex-col"
+         x-data="sheet(() => $wire.set('modalOpen', false))" :style="sheetStyle" @click.stop>
+        <!-- Header (alça de arrasto + título) -->
+        <div x-on:touchstart.passive="start($event)" x-on:touchmove="move($event)" x-on:touchend="end()">
+            <div class="sm:hidden flex justify-center pt-2"><span class="w-10 h-1 bg-gray-300 rounded-full"></span></div>
+            <div class="flex justify-between items-center px-4 py-3 border-b border-gray-100">
+                <div>
+                    <h3 class="text-base font-semibold text-gray-800">
+                        {{ $mode === 'deposit' ? 'Reservar para Meta' : 'Retirar da Meta' }}
+                    </h3>
+                    <p class="text-[11px] text-gray-500">{{ $goal_name }}</p>
+                </div>
+                <button class="text-gray-400 hover:text-gray-600 p-2.5 sm:p-1 -mr-1" wire:click="$set('modalOpen', false)" aria-label="Fechar">
+                    <x-lucide-x class="w-5 h-5" />
+                </button>
             </div>
-            <button class="text-gray-400 hover:text-gray-600 p-1" wire:click="$set('modalOpen', false)">
-                <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
         </div>
 
         <!-- Content -->
@@ -132,18 +138,11 @@ $save = function() {
 
             <!-- Valor -->
             <div>
-                <label class="block text-[11px] font-medium text-gray-500 mb-1">
-                    {{ $mode === 'deposit' ? 'Quanto deseja reservar? (R$)' : 'Quanto deseja retirar? (R$)' }}
-                </label>
-                <input type="number" step="0.01" min="0.01"
-                       @if($mode === 'withdraw') max="{{ $goal_current }}" @endif
-                       wire:model="amount" required
-                    class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 text-center font-semibold
-                        {{ $mode === 'deposit'
-                            ? 'focus:ring-1 focus:ring-green-500 focus:border-green-500 text-green-600'
-                            : 'focus:ring-1 focus:ring-red-500 focus:border-red-500 text-red-600' }}"
-                    placeholder="0,00">
-                @error('amount') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                <x-ui.currency-input model="amount" required
+                    :label="$mode === 'deposit' ? 'Quanto deseja reservar? (R$)' : 'Quanto deseja retirar? (R$)'"
+                    class="{{ $mode === 'deposit'
+                        ? 'focus:ring-green-500 focus:border-green-500 text-green-600'
+                        : 'focus:ring-red-500 focus:border-red-500 text-red-600' }}" />
                 @if($mode === 'withdraw')
                 <p class="text-[10px] text-gray-400 mt-1">Máximo disponível: R$ {{ number_format($goal_current, 2, ',', '.') }}</p>
                 @endif
@@ -158,13 +157,13 @@ $save = function() {
             </div>
 
             <div class="bg-green-50 p-2.5 rounded-lg text-[10px] text-green-700 border border-green-100">
-                <i data-lucide="piggy-bank" class="w-3 h-3 inline mr-0.5"></i>
+                <x-lucide-piggy-bank class="w-3 h-3 inline mr-0.5" />
                 <strong>Isso é uma reserva, não uma despesa.</strong>
                 <span class="text-green-600 block mt-0.5">O valor será registrado como poupança para esta meta.</span>
             </div>
             @else
             <div class="bg-red-50 p-2.5 rounded-lg text-[10px] text-red-700 border border-red-100">
-                <i data-lucide="info" class="w-3 h-3 inline mr-0.5"></i>
+                <x-lucide-info class="w-3 h-3 inline mr-0.5" />
                 <strong>Retirada de meta.</strong>
                 <span class="text-red-600 block mt-0.5">O valor será subtraído do progresso. Limite: valor já acumulado.</span>
             </div>
@@ -181,9 +180,9 @@ $save = function() {
                 class="flex-1 py-2.5 text-sm font-semibold text-white rounded-lg transition flex items-center justify-center
                     {{ $mode === 'deposit' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700' }}">
                 @if($mode === 'deposit')
-                    <i data-lucide="piggy-bank" class="w-4 h-4 mr-1.5"></i> Reservar
+                    <x-lucide-piggy-bank class="w-4 h-4 mr-1.5" /> Reservar
                 @else
-                    <i data-lucide="minus-circle" class="w-4 h-4 mr-1.5"></i> Retirar
+                    <x-lucide-minus-circle class="w-4 h-4 mr-1.5" /> Retirar
                 @endif
             </button>
         </div>
