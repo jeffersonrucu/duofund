@@ -10,7 +10,7 @@ Legenda: `[ ]` pendente · `[~]` em andamento · `[x]` feito · `[!]` bloqueado 
 - [x] **1.1** Remover `.env.prod` do versionamento — `git rm --cached` + `.gitignore:30`; backup em `~/.duofund/env.prod` (600)
 - [x] **1.2** Histórico limpo via `filter-branch` em mirror + force push (`6115bf7` → `732ae5f`); repo local ressincronizado com `reset --soft`, 58 arquivos pendentes intactos
 - [x] **1.3** `APP_KEY` rotacionada em produção (2026-08-25). Backup do `.env` antigo no servidor em `.env.bak-2026-08-25`
-- [!] **1.4** Rotacionar senha do banco (cPanel) — depende do Jefferson
+- [x] **1.4** Rotacionar senha do banco — **decidido não fazer**. A senha só esteve exposta em repo privado da org e o histórico foi limpo; quando o repo virar público o commit não existe mais. Jefferson avaliou o risco residual como aceitável
 - [x] **1.5** `.env` do servidor — `APP_ENV`/`APP_DEBUG` já estavam certos; aplicados `MAIL_MAILER=log` (tira o Mailpit do caminho, reset de senha não dá mais 500) e `LOG_CHANNEL=daily`
 - [x] **1.5b** Aplicados em produção: `LOG_LEVEL=warning`, `MAIL_LOG_CHANNEL=mail`. Backup do `.env` em `.env.bak-pos-deploy`
 - [x] **1.6** `emailVerification` do Fortify — investigado, **nada a fazer**: a view guarda com `instanceof MustVerifyEmail`, que o `User` não implementa, então todo o caminho é inalcançável. Sem crash. Reavaliar quando houver SMTP
@@ -63,8 +63,8 @@ Legenda: `[ ]` pendente · `[~]` em andamento · `[x]` feito · `[!]` bloqueado 
 - [x] **5.4** Comparativo vs mês anterior no relatório: chips de variação nos totais + nova seção "Por categoria" na tela (antes só existia dentro do PDF). Componente `<x-ui.delta-badge>`
   - bug meu que só o teste pegou: `$catUsage` no relatório é collection de models, não pluck — o `mapWithKeys` estava indexando por posição em vez de categoria. 6 testes, incluindo virada de ano
 - [x] **5.5** Export CSV — **sem o `league/csv`**: `fputcsv` resolve. O que importa mais que a lib: `;` + BOM (Excel pt-BR), vírgula decimal, e **neutralização de fórmula** (`=`, `+`, `-`, `@` na descrição, que é input do usuário). 6 testes
-- [!] **5.6** Undo após deletar — **parado de propósito, precisa de decisão**. Soft deletes quebram o `ON DELETE CASCADE` do `mirror_transaction_id`: com `deleted_at`, `$tx->delete()` vira UPDATE, o banco não cascateia, e a **despesa espelho sobrevive ao original apagado** — o saldo do casal quebra em silêncio. Fazer certo = migration em 4 tabelas + reescrever o caminho de espelho (que o `MELHORIAS.md` chama de parte mais frágil do sistema) + a UI do toast
-- [ ] **5.7** PDF do relatório server-side (dompdf) — precisa reescrever o layout flex em tabelas e o Jefferson conferir a saída. Ganho: PDF de texto real em vez de imagem, e −1MB de JS
+- [~] **5.6** Undo após deletar — **decidido não fazer por ora**. Soft deletes quebram o `ON DELETE CASCADE` do `mirror_transaction_id`: com `deleted_at`, `$tx->delete()` vira UPDATE, o banco não cascateia, e a **despesa espelho sobrevive ao original apagado** — o saldo do casal quebra em silêncio. Fazer certo = migration em 4 tabelas + reescrever o caminho de espelho (que o `MELHORIAS.md` chama de parte mais frágil do sistema) + a UI do toast
+- [~] **5.7** PDF do relatório server-side (dompdf) — **decidido não fazer por ora** — precisa reescrever o layout flex em tabelas e o Jefferson conferir a saída. Ganho: PDF de texto real em vez de imagem, e −1MB de JS
 - [x] **5.8** Removidos: `layouts/app/header.blade.php` (zero referências), `layouts/auth/card` e `auth/split` (só `auth/simple` é usado), e `resources/js/app.js` vazio que gerava chunk de 0 byte
 
 ---
@@ -93,6 +93,20 @@ providers de dev, quebrando o `optimize`).
 `composer.json` seria o ideal, mas o Pest 4 exige ^8.3 e torna o lock irresolvível —
 por isso a separação dev/produção é o caminho.
 
-- [ ] Documentar o `--no-dev` no passo de deploy do `CLAUDE.md`
-- [ ] API MCP devolve float em precisão total (`"income":11419.899999999999636...`);
-      arredondar para 2 casas no `MonthlySummaryService`. Pré-existente, cosmético
+- [ ] Documentar o `--no-dev` no passo de deploy do `CLAUDE.md` — **em aberto e importante**:
+      é o que evita repetir a queda de 2026-08-25. O arquivo está fora do versionamento,
+      então precisa ser editado à mão
+- [~] API MCP devolve float em precisão total (`"income":11419.899999999999636...`).
+      Pré-existente e cosmético; Jefferson optou por deixar como está
+- [~] **4.4** Testes em SQLite — deixado de lado junto com o resto
+
+---
+
+## Encerramento (2026-08-25)
+
+Blocos 1 a 5 concluídos e em produção, menos os itens que o Jefferson decidiu não fazer
+(5.6 undo, 5.7 dompdf, 4.4 SQLite, rotação de senha e o arredondamento da API).
+
+**Números:** 47 → 143 testes · PHPStan nível 5 limpo · 12 commits · zero requisição externa.
+
+**Único item realmente em aberto:** documentar o `--no-dev` no deploy do `CLAUDE.md`.
