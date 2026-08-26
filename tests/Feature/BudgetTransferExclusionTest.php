@@ -107,6 +107,18 @@ class BudgetTransferExclusionTest extends TestCase
         $this->assertEquals(50, $response->json('budget_used_pct'));
     }
 
+    public function test_budget_page_excludes_transfer_from_usage_and_exposes_it(): void
+    {
+        Category::create(['user_id' => $this->user->id, 'name' => 'Mercado', 'limit' => 1000, 'scope' => 'personal']);
+        $this->expense('Mercado', 500);
+        $this->transferToShared(6000);
+
+        $data = Volt::test('pages.budget')->get('data');
+
+        $this->assertEquals(500.0, collect($data['usage'])->sum());
+        $this->assertEquals(6000.0, $data['transfer']);
+    }
+
     public function test_report_category_ranking_excludes_transfer(): void
     {
         $this->expense('Mercado', 300);

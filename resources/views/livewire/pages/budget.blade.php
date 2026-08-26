@@ -27,16 +27,22 @@ $data = computed(function() {
 
     $categories = Category::forView($user, $this->view)->with('user')->orderBy('name')->get();
 
-    $usage = Transaction::forView($user, $this->view)
+    $expenses = Transaction::forView($user, $this->view)
         ->inMonth($date)
-        ->where('type', 'expense')
+        ->where('type', 'expense');
+
+    // Espelho "Transferido para conta conjunta" sai do caixa, mas não é gasto orçado
+    $usage = (clone $expenses)
+        ->whereNull('mirror_transaction_id')
         ->selectRaw('category, sum(amount) as total')
         ->groupBy('category')
         ->pluck('total', 'category');
 
+    $transfer = (float) (clone $expenses)->whereNotNull('mirror_transaction_id')->sum('amount');
+
     $totalBudget = $categories->sum('limit');
 
-    return compact('categories', 'usage', 'totalBudget');
+    return compact('categories', 'usage', 'totalBudget', 'transfer');
 });
 
 $detailTransactions = computed(function() {
@@ -162,6 +168,11 @@ $deleteCat = function($id) {
                             <span class="text-[10px] font-bold {{ $pctUsed > 100 ? 'text-red-600' : ($pctUsed > 80 ? 'text-yellow-600' : 'text-gray-500') }}">{{ $pctUsed }}%</span>
                         </div>
                         <p class="text-xl sm:text-2xl font-bold text-gray-900">R$ {{ number_format($totalSpent, 2, ',', '.') }}</p>
+                        @if($this->data['transfer'] > 0)
+                            <p class="text-[10px] text-gray-500 mt-0.5">
+                                + R$ {{ number_format($this->data['transfer'], 2, ',', '.') }} transferidos p/ conta do casal <span class="text-gray-400">(fora do orçamento)</span>
+                            </p>
+                        @endif
                         <div class="w-full bg-red-100 rounded-full h-2 mt-1.5">
                             <div class="{{ $pctUsed > 100 ? 'bg-red-500' : ($pctUsed > 80 ? 'bg-yellow-500' : 'bg-primary') }} h-2 rounded-full transition-all duration-500" style="width: {{ min(100, $pctUsed) }}%"></div>
                         </div>
