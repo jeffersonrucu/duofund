@@ -18,6 +18,9 @@ state([
     'showDeleteModal' => false
 ])->url();
 
+// Série recorrente "irmã" de um lançamento avulso (mesma descrição/valor, meses futuros)
+state(['relatedGroupId' => null]);
+
 $totals = computed(function() {
     return app(\App\Services\MonthlySummaryService::class)
         ->for(auth()->user(), $this->view, Carbon::parse($this->currentMonth));
@@ -55,16 +58,27 @@ $confirmDelete = function ($id) {
     $tx = Transaction::find($id);
     if (!$tx) return;
 
-    if ($tx->recurring_group_id) {
-        $this->confirmDeleteId = $id;
+    // Lançamento avulso pode ter uma série igual nos próximos meses (ex.: assinatura
+    // relançada à mão) — oferece excluir as próximas ocorrências junto.
+    $this->relatedGroupId = $tx->recurring_group_id ? null : Transaction::forView(auth()->user(), $this->view)
+        ->whereNotNull('recurring_group_id')
+        ->where('description', $tx->description)
+        ->where('amount', $tx->amount)
+        ->where('type', $tx->type)
+        ->where('date', '>', $tx->date)
+        ->value('recurring_group_id');
+
+    $this->confirmDeleteId = $id;
+
+    if ($tx->recurring_group_id || $this->relatedGroupId) {
         $this->isRecurringDelete = true;
         $this->deleteMode = 'single';
         $this->showDeleteModal = true;
-    } else {
-        $this->confirmDeleteId = $id;
-        $this->isRecurringDelete = false;
-        $this->deleteTransaction();
+        return;
     }
+
+    $this->isRecurringDelete = false;
+    $this->deleteTransaction();
 };
 
 $deleteTransaction = function () {
@@ -72,12 +86,20 @@ $deleteTransaction = function () {
     $user = auth()->user();
 
     if ($tx && $tx->manageableBy($user)) {
-        if ($this->isRecurringDelete && in_array($this->deleteMode, ['all', 'forward'], true)) {
+        $groupId = $tx->recurring_group_id ?: $this->relatedGroupId;
+
+        if ($this->isRecurringDelete && $groupId && in_array($this->deleteMode, ['all', 'forward'], true)) {
             // Remove a série (ou deste mês em diante) e os espelhos
             // "Transferido para conta conjunta"
             $fromDate = $this->deleteMode === 'forward' ? $tx->date->toDateString() : null;
             app(\App\Services\TransactionMirrorService::class)
-                ->deleteSeries($tx->recurring_group_id, $user->getFamilyUserIds(), $fromDate);
+                ->deleteSeries($groupId, $user->getFamilyUserIds(), $fromDate);
+
+            // O avulso não pertence à série, então sai à parte
+            if (! $tx->recurring_group_id) {
+                $tx->delete();
+            }
+
             $msg = $this->deleteMode === 'forward'
                 ? 'Lançamentos removidos deste mês em diante.'
                 : 'Série recorrente removida com sucesso.';
@@ -88,7 +110,7 @@ $deleteTransaction = function () {
         }
         $this->dispatch('notify', $msg);
     }
-    $this->reset(['showDeleteModal', 'confirmDeleteId', 'isRecurringDelete', 'deleteMode']);
+    $this->reset(['showDeleteModal', 'confirmDeleteId', 'isRecurringDelete', 'deleteMode', 'relatedGroupId']);
 };
 
 $deleteGroup = function() {
@@ -353,7 +375,11 @@ $deleteGroup = function() {
                 </div>
                 <h3 class="text-base font-bold text-gray-900">Excluir Recorrência</h3>
                 <p class="text-sm text-gray-500 mt-2">
-                    Este item faz parte de uma série.<br>Como deseja proceder?
+                    @if($relatedGroupId)
+                        Este item é avulso, mas existe uma recorrência igual nos próximos meses.<br>Como deseja proceder?
+                    @else
+                        Este item faz parte de uma série.<br>Como deseja proceder?
+                    @endif
                 </p>
             </div>
 
