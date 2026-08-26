@@ -31,6 +31,8 @@ $summary = computed(function() {
     $totals = app(\App\Services\MonthlySummaryService::class)->for($user, $this->view, $targetDate);
     $income = $totals['income'];
     $expense = $totals['expense'];
+    $transfer = $totals['transfer'];
+    $budgetExpense = $expense - $transfer;
 
     $queryTx = Transaction::forView($user, $this->view)->inMonth($targetDate);
 
@@ -49,9 +51,9 @@ $summary = computed(function() {
         ->get();
 
     if ($budgetTotal > 0) {
-        $pctUsed = min(100, round(($expense / $budgetTotal) * 100));
+        $pctUsed = min(100, round(($budgetExpense / $budgetTotal) * 100));
     } else {
-        $pctUsed = $expense > 0 ? 100 : 0;
+        $pctUsed = $budgetExpense > 0 ? 100 : 0;
     }
 
     // Categorias em risco: o dado já existia, mas só aparecia em /orcamento
@@ -76,6 +78,7 @@ $summary = computed(function() {
         'alerts' => $alerts,
         'income' => $income,
         'expense' => $expense,
+        'transfer' => $transfer,
         'result' => $income - $expense,
         'budgetTotal' => $budgetTotal,
         'pctUsed' => $pctUsed,
@@ -287,6 +290,9 @@ $closeCategoryDetail = function() {
                 </h3>
                 <p class="text-[10px] text-gray-500 mt-1">
                     Meta: R$ {{ number_format($this->summary['budgetTotal'], 2, ',', '.') }}
+                    @if($this->summary['transfer'] > 0)
+                        · Transferido p/ conjunta: R$ {{ number_format($this->summary['transfer'], 2, ',', '.') }}
+                    @endif
                 </p>
                 <div class="w-full bg-red-100 rounded-full h-2 mt-1.5">
                     <div class="bg-red-500 h-2 rounded-full transition-all duration-500" style="width: {{ $this->summary['pctUsed'] }}%"></div>

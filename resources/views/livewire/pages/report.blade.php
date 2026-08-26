@@ -67,8 +67,10 @@ $report = computed(function () {
 
     $query = Transaction::forView($user, $this->view)->inMonth($date);
 
+    // Espelhos de transferência não são gasto por categoria (ficam só nos totais)
     $catUsage = (clone $query)
         ->where('type', 'expense')
+        ->whereNull('mirror_transaction_id')
         ->selectRaw('category, sum(amount) as total, count(*) as qty')
         ->groupBy('category')
         ->orderByDesc('total')
@@ -91,6 +93,7 @@ $report = computed(function () {
     $prevCatUsage = Transaction::forView($user, $this->view)
         ->inMonth($prevDate)
         ->where('type', 'expense')
+        ->whereNull('mirror_transaction_id')
         ->selectRaw('category, sum(amount) as total')
         ->groupBy('category')
         ->pluck('total', 'category');

@@ -25,15 +25,17 @@ class DuofundMcpController extends Controller
 
         $totals = $summary->for($user, $scope, $date);
         $budget = (float) Category::forView($user, $scope)->sum('limit');
+        $budgetExpense = $totals['expense'] - $totals['transfer'];
 
         return response()->json([
             'month'          => $date->locale('pt_BR')->isoFormat('MMMM [de] YYYY'),
             'scope'          => $scope,
             'income'         => $totals['income'],
             'expenses'       => $totals['expense'],
+            'transfer'       => $totals['transfer'],
             'balance'        => $totals['balance'],
             'budget_total'   => $budget,
-            'budget_used_pct'=> $budget > 0 ? round(($totals['expense'] / $budget) * 100, 1) : 0,
+            'budget_used_pct'=> $budget > 0 ? round(($budgetExpense / $budget) * 100, 1) : 0,
         ]);
     }
 
