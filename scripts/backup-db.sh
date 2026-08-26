@@ -9,7 +9,7 @@
 # Uso:  ./scripts/backup-db.sh
 # Vars: BACKUP_DIR (padrão ~/duofund-backups), BACKUP_KEEP_DAYS (padrão 14)
 #
-# Cron do cPanel (diário às 03h20, logando falhas):
+# Cron (diário às 03h20, logando falhas):
 #   20 3 * * * /caminho/do/projeto/scripts/backup-db.sh >> ~/backup.log 2>&1
 
 set -euo pipefail

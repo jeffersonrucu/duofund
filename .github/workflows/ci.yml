@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Testes e análise estática
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: testing
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=10s --health-timeout=5s --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pest 4 exige PHP ^8.3, então o teste roda acima da versão de produção.
+      # A compatibilidade com o 8.2 do servidor é verificada no job de deploy.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, xml, curl, zip, pdo_mysql, bcmath, intl
+          coverage: none
+
+      - uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+
+      - run: composer install --no-interaction --prefer-dist --no-progress
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      # O PageSmokeTest renderiza @vite, então o manifest precisa existir
+      - run: npm run build
+
+      - name: Preparar ambiente
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - run: php artisan test
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: testing
+          DB_USERNAME: root
+          DB_PASSWORD: password
+
+      - run: ./vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+  deploy:
+    name: Deploy em produção
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Mesma versão do servidor. Se alguma dependência de produção exigir
+      # mais que isso, o build falha aqui em vez de derrubar o site.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, xml, curl, zip, pdo_mysql, bcmath, intl
+          coverage: none
+
+      - name: Instalar dependências de produção
+        run: |
+          composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-progress
+          composer check-platform-reqs --no-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Configurar SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      # public/hot quebra o carregamento de CSS em produção
+      - name: Enviar aplicação
+        run: |
+          rm -f public/hot
+          rsync -az \
+            --exclude='.env' --exclude='.env.prod' --exclude='.git/' \
+            --exclude='.github/' --exclude='node_modules/' --exclude='vendor/' \
+            --exclude='storage/framework/cache/' --exclude='storage/framework/sessions/' \
+            --exclude='storage/framework/views/' --exclude='storage/logs/' \
+            --exclude='storage/app/' --exclude='bootstrap/cache/' \
+            --exclude='compose.yaml' --exclude='public/hot' --exclude='mcp/node_modules/' \
+            -e "ssh -i ~/.ssh/deploy -o BatchMode=yes" \
+            ./ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH }}/"
+
+      # vendor separado com --delete: garante que pacote de dev de um deploy
+      # anterior não sobre e eleve o piso de versão do PHP
+      - name: Enviar vendor
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy -o BatchMode=yes" \
+            ./vendor/ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH }}/vendor/"
+
+      - name: Migrar e recachear
+        run: |
+          ssh -i ~/.ssh/deploy -o BatchMode=yes \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "cd ${{ secrets.DEPLOY_PATH }} && \
+             rm -f bootstrap/cache/packages.php bootstrap/cache/services.php && \
+             php artisan migrate --force && \
+             php artisan optimize"
+
+      - name: Verificar que o site respondeu
+        run: |
+          for path in / /login; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "https://duofund.studiostg.com.br${path}")
+            echo "${path} -> ${code}"
+            [ "$code" = "200" ] || exit 1
+          done

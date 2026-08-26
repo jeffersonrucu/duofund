@@ -1,248 +1,205 @@
+<div align="center">
+
 # DuoFund
 
-Aplicação web de **gestão financeira colaborativa** construída com **Laravel 12** e **Livewire Volt**. O DuoFund permite que casais ou famílias gerenciem suas finanças em conjunto, com suporte a gastos pessoais e compartilhados.
+**Finanças a dois, sem complicação.**
 
-## Sobre o Projeto
+Um app de finanças pessoais para casais, onde cada um enxerga o próprio dinheiro
+e os dois enxergam o dinheiro do casal — sem misturar as duas coisas.
 
-O nome "DuoFund" reflete seu propósito: gerenciamento financeiro para **dois** (ou mais membros de uma família). A aplicação oferece uma experiência completa para controle de receitas, despesas, orçamentos por categoria e metas financeiras.
+[![CI](https://github.com/Studio-STG/duofund/actions/workflows/ci.yml/badge.svg)](https://github.com/Studio-STG/duofund/actions/workflows/ci.yml)
+![Laravel 12](https://img.shields.io/badge/Laravel-12-FF2D20?logo=laravel&logoColor=white)
+![PHP 8.2+](https://img.shields.io/badge/PHP-8.2+-777BB4?logo=php&logoColor=white)
+![Livewire Volt](https://img.shields.io/badge/Livewire-Volt-4E56A6)
+![143 testes](https://img.shields.io/badge/testes-143%20passando-brightgreen)
+![PHPStan nível 5](https://img.shields.io/badge/PHPStan-n%C3%ADvel%205-2a5d8f)
 
-## Funcionalidades
+<img src="docs/screenshots/landing.png" alt="Página inicial do DuoFund" width="100%">
 
-### Dashboard
-- Visualização consolidada de receitas e despesas do mês
-- Modo de visualização dual: **Pessoal** ou **Compartilhado**
-- Navegação entre meses
-- Cards de resumo: Receitas, Despesas e Resultado do Mês
-- Orçamento por categoria com barras de progresso
-- Atividade recente (últimas transações)
+</div>
 
-### Transações (Expenses)
-- Lista paginada de todas as transações
-- Suporte para 3 tipos de transações:
-  - **Única**: Transação simples, uma vez
-  - **Recorrente**: Repetida mensalmente (60 meses)
-  - **Parcelada**: Dividida em N parcelas mensais
-- Edição e exclusão com opção de afetar toda a série ou apenas uma transação
-- Filtros por escopo (pessoal/compartilhado) e mês
+---
 
-### Categorias (Budget)
-- Criação de categorias de despesa com limite de gastos
-- Visualização de gastos vs limites com barras de progresso coloridas:
-  - 🟢 Verde: 0-80% do limite
-  - 🟡 Amarelo: 80-100% do limite
-  - 🔴 Vermelho: >100% (excedido)
+## O problema
 
-### Metas Financeiras (Goals)
-- Criação de objetivos com nome, alvo e valor atual
-- Depósitos nas metas via modal
-- Suporte a metas privadas
-- Progresso visual com barra animada
+App de finanças para casal costuma escolher um dos dois extremos: ou tudo é
+compartilhado — e você perde a privacidade do seu dinheiro — ou nada é, e a
+conta conjunta vira uma planilha à parte.
 
-### Sistema de Famílias
-- Convite para parceiro(a) via **link assinado** (válido por 24h)
-- Compartilhamento de dados financeiros entre membros da família
-- Dados sincronizados em modo "Compartilhado"
+O DuoFund resolve com **escopo**. Toda transação, categoria, meta, cartão e
+desejo nasce em uma de duas visões:
 
-### Autenticação
-- Registro com convite opcional
-- Verificação de email
-- Autenticação Two-Factor (2FA)
-- Recuperação de senha
-- Gerenciamento de perfil
+| | |
+|---|---|
+| **Meu dinheiro** (`personal`) | Só você vê |
+| **Nosso dinheiro** (`shared`) | Os dois veem, com o nome de quem lançou |
 
-## Stack Tecnológica
+A visão ativa persiste entre as páginas, e um mesmo modelo nunca vaza de uma
+para a outra. Quando você registra uma **receita compartilhada**, o app cria
+automaticamente a despesa espelho "Transferido para conta conjunta" na sua
+conta pessoal — porque aquele dinheiro saiu de você e entrou no bolo comum.
 
-### Backend
-| Tecnologia | Versão |
-|------------|--------|
-| PHP | ^8.2 |
-| Laravel Framework | ^12.0 |
-| Laravel Fortify | ^1.30 |
-| Livewire Volt | ^1.7.0 |
-| Livewire Flux | ^2.9.0 |
+## Telas
 
-### Frontend
-| Tecnologia | Versão |
-|------------|--------|
-| Vite | ^7.0.4 |
-| Tailwind CSS | ^4.0.7 |
-| Alpine.js | (via Livewire) |
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/painel.png" alt="Painel"><br><sub><b>Painel</b> — resumo do mês, orçamento por categoria e alerta de estouro</sub></td>
+<td width="50%"><img src="docs/screenshots/transacoes.png" alt="Transações"><br><sub><b>Transações</b> — entradas e saídas agrupadas por data</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/orcamento.png" alt="Orçamento"><br><sub><b>Orçamento</b> — limite por categoria com progresso</sub></td>
+<td><img src="docs/screenshots/relatorio.png" alt="Relatório"><br><sub><b>Relatório</b> — comparativo com o mês anterior, export CSV e PDF</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/metas.png" alt="Metas"><br><sub><b>Metas</b> — progresso, ritmo de poupança e previsão</sub></td>
+<td><img src="docs/screenshots/desejos.png" alt="Desejos"><br><sub><b>Desejos</b> — lista com prioridade e simulador de compra</sub></td>
+</tr>
+</table>
 
-### Desenvolvimento
-| Ferramenta | Versão |
-|------------|--------|
-| Laravel Sail | ^1.41 |
-| Pest PHP | ^4.1 |
-| Laravel Pint | ^1.24 |
+<details>
+<summary><b>No celular</b> (o app é mobile-first)</summary>
+<br>
+<p align="center">
+<img src="docs/screenshots/painel-mobile.png" width="24%" alt="Painel no celular">
+<img src="docs/screenshots/transacoes-mobile.png" width="24%" alt="Transações no celular">
+<img src="docs/screenshots/orcamento-mobile.png" width="24%" alt="Orçamento no celular">
+<img src="docs/screenshots/metas-mobile.png" width="24%" alt="Metas no celular">
+</p>
+</details>
 
-## Requisitos
+## O que faz
 
-- Docker e Docker Compose
-- Git
+- **Transações** com receita, despesa e reserva; recorrentes e parceladas
+- **Orçamento** por categoria, com aviso no painel a partir de 80% do limite
+- **Metas** com plano por valor mensal ou por data-alvo, e previsão de conclusão
+  comparada ao ritmo real
+- **Cartões** e agrupamento de parcelas futuras
+- **Lista de desejos** com prioridade e simulador de "cabe no meu mês?"
+- **Relatório** mensal com comparativo contra o mês anterior, export CSV
+  (abre certo no Excel pt-BR) e PDF
+- **Convite do parceiro** por link assinado
+- **PWA** instalável, com 2FA opcional
 
-## Instalação
+## Converse com suas finanças pelo Claude
 
-### 1. Clone o repositório
+O projeto inclui um **servidor MCP** que expõe a conta para assistentes de IA.
+Na prática, dá para perguntar *"quanto gastei com mercado esse mês?"* ou dizer
+*"lança 80 reais de farmácia"* direto no Claude.
+
+São 14 ferramentas cobrindo resumo, categorias, metas, transações e desejos —
+todas respeitando o mesmo escopo `personal`/`shared` do app.
+
+```jsonc
+// .claude/mcp.json
+{
+  "mcpServers": {
+    "duofund": {
+      "command": "node",
+      "args": ["./mcp/server.js"],
+      "env": {
+        "DUOFUND_URL": "https://seu-dominio",
+        "DUOFUND_TOKEN": "seu-token"
+      }
+    }
+  }
+}
+```
+
+A API por trás fica em `/api/mcp/*`, autenticada por bearer token com
+`hash_equals` e limitada a 60 requisições por minuto.
+
+## Stack
+
+| | |
+|---|---|
+| Backend | PHP 8.2+, Laravel 12, Livewire Volt, Fortify |
+| Frontend | Tailwind CSS 4, Alpine.js, Lucide (SVG server-side) |
+| Build | Vite 7 |
+| Banco | MySQL 8 |
+| Testes | Pest 4 · PHPStan/Larastan nível 5 |
+
+Nenhuma página faz requisição para fora: fontes, ícones e JS são todos
+servidos pelo próprio domínio.
+
+## Rodando localmente
 
 ```bash
-git clone <url-do-repositorio>
+git clone git@github.com:Studio-STG/duofund.git
 cd duofund
-```
 
-### 2. Instale as dependências do Composer
-
-```bash
-docker run --rm \
-    -u "$(id -u):$(id -g)" \
-    -v "$(pwd):/var/www/html" \
-    -w /var/www/html \
-    laravelsail/php83-composer:latest \
-    composer install --ignore-platform-reqs
-```
-
-### 3. Configure o ambiente
-
-```bash
 cp .env.example .env
+docker compose up -d
+docker compose exec laravel.test composer install
+docker compose exec laravel.test php artisan key:generate
+docker compose exec laravel.test php artisan migrate --seed
+docker compose exec laravel.test npm ci && npm run build
 ```
 
-### 4. Instale o Laravel Sail
+Acesse **http://localhost:8080**.
+
+Para ver o app com dados de demonstração (é o que aparece nas telas acima):
 
 ```bash
-php artisan sail:install --with=mysql
+docker compose exec laravel.test php artisan db:seed --class=TestDataSeeder
 ```
 
-### 5. Inicie os containers
+> Entre com **test@example.com** / **password**.
+
+## Testes e qualidade
 
 ```bash
-./vendor/bin/sail up -d
+docker compose exec laravel.test php artisan test      # 143 testes
+docker compose exec laravel.test composer analyse      # PHPStan nível 5
+docker compose exec laravel.test composer check        # os dois
 ```
 
-### 6. Gere a chave da aplicação
+Alguns testes existem por motivos específicos que valem menção:
 
-```bash
-./vendor/bin/sail artisan key:generate
-```
+- **`NoLazyLoadingTest`** renderiza todas as páginas **com dados** nos dois
+  escopos. `Model::preventLazyLoading()` só arma o guard em resultado com mais
+  de uma linha, então página vazia não acusa N+1 nenhum.
+- **`PageSmokeTest`** renderiza as 16 páginas que servem HTML. Como os ícones
+  são SVG resolvidos em tempo de render, um nome errado vira exceção — não um
+  espaço em branco silencioso.
+- **`MonthNavigationTest`** ataca a URL com valores inválidos: `view` e
+  `currentMonth` são estado exposto na query string.
 
-### 7. Execute as migrations
+## Deploy
 
-```bash
-./vendor/bin/sail artisan migrate
-```
+`git push` na `master` dispara a esteira em `.github/workflows/ci.yml`:
 
-### 8. Instale dependências do NPM e compile os assets
+1. Testes e PHPStan no **PHP 8.3** (o Pest 4 exige `^8.3`)
+2. `composer install --no-dev` no **PHP 8.2**, a versão do servidor — se alguma
+   dependência de produção exigir mais que isso, o build falha aqui em vez de
+   derrubar o site
+3. `rsync` da aplicação e do `vendor`, migrations e recache
+4. Verificação de que o site respondeu 200
 
-```bash
-./vendor/bin/sail npm install
-./vendor/bin/sail npm run build
-```
+O `vendor` de produção é construído sem dependências de desenvolvimento de
+propósito: o Pest exige PHP `^8.3` e elevaria o piso de versão do servidor
+mesmo sem nunca rodar lá.
 
-## Uso
+Backup do banco roda por cron (`scripts/backup-db.sh`), em shell puro — em
+hospedagem compartilhada o `proc_open` costuma vir bloqueado, o que inviabiliza
+as soluções que chamam o `mysqldump` pelo PHP.
 
-### Iniciar o ambiente de desenvolvimento
-
-```bash
-./vendor/bin/sail up -d
-```
-
-A aplicação estará disponível em: `http://localhost`
-
-### Compilar assets em modo de desenvolvimento (com hot reload)
-
-```bash
-./vendor/bin/sail npm run dev
-```
-
-### Parar os containers
-
-```bash
-./vendor/bin/sail down
-```
-
-## Comandos Úteis
-
-```bash
-# Acessar o container
-./vendor/bin/sail shell
-
-# Executar comandos Artisan
-./vendor/bin/sail artisan <comando>
-
-# Executar testes
-./vendor/bin/sail test
-
-# Formatar código com Pint
-./vendor/bin/sail pint
-
-# Ver logs em tempo real
-./vendor/bin/sail logs -f
-```
-
-## Estrutura do Banco de Dados
-
-### Tabelas Principais
-
-#### users
-- Dados do usuário (nome, email, senha)
-- Relacionamento com família (`family_id`)
-
-#### families
-- Agrupa usuários para compartilhamento de dados
-
-#### transactions
-- Registra receitas e despesas
-- Campos: `description`, `amount`, `type` (income/expense), `scope` (personal/shared)
-- Suporte a recorrência e parcelamento via `recurring_group_id`
-
-#### categories
-- Categorias de gastos com limite definido
-- Campos: `name`, `limit`, `scope`
-
-#### goals
-- Metas financeiras
-- Campos: `name`, `target`, `current`, `is_private`, `scope`
-
-## Fluxos Principais
-
-### Registro e Convite de Parceiro
+## Estrutura
 
 ```
-1. Usuário A se registra → cria nova família automaticamente
-2. Usuário A gera link de convite (válido 24h)
-3. Usuário B clica no link e se registra
-4. Usuário B é associado à família do Usuário A
-5. Ambos podem visualizar dados em modo "Compartilhado"
-```
+app/
+├── Enums/PaymentMethod.php          # pix, cartão, boleto — rótulo e ícone juntos
+├── Livewire/Concerns/               # navegação de mês e alternância de escopo
+├── Models/Concerns/ScopedToView.php # o filtro personal/shared, em um lugar só
+├── Services/
+│   ├── TransactionMirrorService.php # a despesa espelho da receita compartilhada
+│   └── MonthlySummaryService.php    # fonte única dos totais do mês
+└── Support/Money.php                # entrada em pt-BR → decimal
 
-### Criar Transação Recorrente
-
-```
-1. Usuário abre modal de nova transação
-2. Seleciona frequência "Todo mês"
-3. Sistema cria 60 transações (5 anos)
-4. Todas vinculadas pelo mesmo `recurring_group_id`
-5. Edição pode afetar uma ou todas da série
-```
-
-### Visualização Pessoal vs Compartilhado
-
-```
-Pessoal: Mostra apenas transações do próprio usuário com scope "personal"
-Compartilhado: Consolida transações de todos da família com scope "shared"
-```
-
-## Arquitetura
-
-O projeto utiliza o padrão **Livewire Volt** (Single File Components), onde a lógica PHP e o template Blade ficam no mesmo arquivo. Os componentes principais estão em:
-
-```
-resources/views/livewire/
-├── pages/           # Páginas principais (dashboard, expenses, budget, goals)
-├── components/      # Modais e componentes reutilizáveis
-├── auth/            # Autenticação (login, register, 2FA)
-└── settings/        # Configurações de perfil
+resources/views/livewire/pages/      # as telas, em Livewire Volt
+mcp/server.js                        # servidor MCP
 ```
 
 ## Licença
 
-Este projeto é privado e de uso restrito.
+Ainda não definida — sem uma licença explícita, todos os direitos são
+reservados.

@@ -28,3 +28,7 @@ yarn-error.log
 
 # Contém segredos de produção — manter fora do versionamento
 .env.prod
+
+# Logs de erro do servidor (contêm caminhos do host)
+error_log
+public/error_log
