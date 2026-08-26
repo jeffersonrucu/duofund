@@ -1,11 +1,13 @@
 <?php
-use function Livewire\Volt\{state, computed, layout};
+use function Livewire\Volt\{state, computed, layout, uses};
+use App\Livewire\Concerns\HasScopeToggle;
 use App\Models\WishlistItem;
 use App\Models\Transaction;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 
 layout('components.layouts.app');
+uses([HasScopeToggle::class]);
 
 state([
     'view'            => session('view_mode', 'personal'),
@@ -30,17 +32,8 @@ state([
 ])->url();
 
 $items = computed(function () {
-    $user      = auth()->user();
-    $familyIds = $user->getFamilyUserIds();
-    $query     = WishlistItem::query();
-
-    if ($this->view === 'personal') {
-        $query->where('user_id', $user->id)->where('scope', 'personal');
-    } else {
-        $query->whereIn('user_id', $familyIds)->where('scope', 'shared');
-    }
-
-    return $query
+    return WishlistItem::forView(auth()->user(), $this->view)
+        ->with('user')
         ->orderByRaw("FIELD(status, 'pending', 'purchased')")
         ->orderByRaw("FIELD(priority, 'high', 'medium', 'low')")
         ->orderBy('created_at', 'desc')
@@ -51,12 +44,6 @@ $simItem = computed(function () {
     return $this->simItemId ? WishlistItem::find($this->simItemId) : null;
 });
 
-$setView = function ($mode) {
-    $this->view = $mode;
-    session(['view_mode' => $mode]);
-    $this->dispatch('scope-changed', $mode);
-};
-
 $openModal = function ($id = null) {
     $this->reset(['name', 'url', 'price', 'notes', 'editId']);
     $this->priority = 'medium';
@@ -64,7 +51,7 @@ $openModal = function ($id = null) {
 
     if ($id) {
         $item = WishlistItem::find($id);
-        if ($item && ($item->user_id === auth()->id() || in_array($item->user_id, auth()->user()->getFamilyUserIds()))) {
+        if ($item && $item->manageableBy(auth()->user())) {
             $this->editId   = $item->id;
             $this->name     = $item->name;
             $this->url      = $item->url ?? '';
@@ -79,10 +66,7 @@ $openModal = function ($id = null) {
 };
 
 $save = function () {
-    if ($this->price) {
-        $clean       = str_replace('.', '', $this->price);
-        $this->price = str_replace(',', '.', $clean);
-    }
+    $this->price = \App\Support\Money::toDecimal($this->price) ?? '';
 
     $this->validate([
         'name'     => 'required|string|max:255',
@@ -123,20 +107,11 @@ $save = function () {
 };
 
 $openSim = function ($id) {
-    $user      = auth()->user();
-    $familyIds = $user->getFamilyUserIds();
-    $now       = Carbon::now();
+    $totals = app(\App\Services\MonthlySummaryService::class)
+        ->for(auth()->user(), $this->view, Carbon::now());
 
-    $query = Transaction::query();
-    if ($this->view === 'personal') {
-        $query->where('user_id', $user->id)->where('scope', 'personal');
-    } else {
-        $query->whereIn('user_id', $familyIds)->where('scope', 'shared');
-    }
-    $query->whereYear('date', $now->year)->whereMonth('date', $now->month);
-
-    $this->simIncome    = (clone $query)->where('type', 'income')->sum('amount');
-    $this->simExpenses  = (clone $query)->where('type', 'expense')->sum('amount');
+    $this->simIncome    = $totals['income'];
+    $this->simExpenses  = $totals['expense'];
     $this->simItemId    = $id;
     $this->simPayment   = 'avista';
     $this->simInstallments = 12;
@@ -184,12 +159,12 @@ $buyItem = function () {
     $item->update(['status' => 'purchased']);
     $this->simItemId = null;
     $this->dispatch('notify', 'Compra lançada no orçamento!');
-    $this->redirect(request()->header('Referer'), navigate: true);
+    $this->redirect(request()->header('Referer') ?: route('dashboard'), navigate: true);
 };
 
 $togglePurchased = function ($id) {
     $item = WishlistItem::find($id);
-    if ($item && $item->user_id === auth()->id()) {
+    if ($item && $item->manageableBy(auth()->user())) {
         $newStatus = $item->status === 'purchased' ? 'pending' : 'purchased';
         $item->update(['status' => $newStatus]);
         $this->dispatch('notify', $newStatus === 'purchased' ? 'Marcado como comprado!' : 'Devolvido à lista de desejos.');
@@ -202,7 +177,7 @@ $setConfirmDelete = function ($id) {
 
 $deleteItem = function ($id) {
     $item = WishlistItem::find($id);
-    if ($item && $item->user_id === auth()->id()) {
+    if ($item && $item->manageableBy(auth()->user())) {
         $item->delete();
         $this->dispatch('notify', 'Item removido da lista.');
     }
@@ -214,16 +189,7 @@ $deleteItem = function ($id) {
     {{-- HEADER --}}
     <div class="grid grid-cols-1 md:grid-cols-3 items-center mb-4 sm:mb-6 gap-3">
         <div class="flex flex-col items-center md:items-start justify-self-center md:justify-self-start">
-            <div class="bg-white p-0.5 rounded-lg shadow-sm border border-gray-200 inline-flex">
-                <button wire:click="setView('personal')"
-                    class="px-3 py-1.5 rounded-md text-[11px] sm:text-sm font-medium transition flex items-center {{ $view === 'personal' ? 'bg-primary text-white shadow' : 'text-gray-500 hover:bg-gray-50' }}">
-                    <i data-lucide="user" class="w-3 h-3 sm:w-4 sm:h-4 mr-1"></i> Minha Lista
-                </button>
-                <button wire:click="setView('shared')"
-                    class="px-3 py-1.5 rounded-md text-[11px] sm:text-sm font-medium transition flex items-center {{ $view === 'shared' ? 'bg-purple-600 text-white shadow' : 'text-gray-500 hover:bg-gray-50' }}">
-                    <i data-lucide="users" class="w-3 h-3 sm:w-4 sm:h-4 mr-1"></i> Nossa Lista
-                </button>
-            </div>
+            <x-ui.view-toggle :view="$view" personal-label="Minha Lista" shared-label="Nossa Lista" />
             <p class="text-[10px] text-gray-400 mt-1">
                 {{ $this->items->count() }} {{ $this->items->count() === 1 ? 'item' : 'itens' }}
                 @php $total = $this->items->where('status','pending')->sum('price'); @endphp
@@ -234,7 +200,7 @@ $deleteItem = function ($id) {
         <div class="hidden md:flex justify-self-end md:col-start-3">
             <button wire:click="openModal()"
                 class="bg-primary hover:bg-secondary text-white font-medium py-2 px-4 rounded-lg shadow-md shadow-primary/25 items-center transition text-sm flex">
-                <i data-lucide="plus" class="w-4 h-4 mr-1.5"></i> Novo Desejo
+                <x-lucide-plus class="w-4 h-4 mr-1.5" /> Novo Desejo
             </button>
         </div>
     </div>
@@ -243,7 +209,7 @@ $deleteItem = function ($id) {
     <div class="md:hidden mb-4">
         <button wire:click="openModal()"
             class="w-full bg-primary hover:bg-secondary text-white font-medium py-2.5 px-4 rounded-xl shadow-md shadow-primary/25 items-center transition text-sm flex justify-center">
-            <i data-lucide="plus" class="w-4 h-4 mr-1.5"></i> Novo Desejo
+            <x-lucide-plus class="w-4 h-4 mr-1.5" /> Novo Desejo
         </button>
     </div>
 
@@ -279,11 +245,11 @@ $deleteItem = function ($id) {
                         @if($item->user_id === auth()->id())
                         <button wire:click="openModal({{ $item->id }})"
                             class="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-blue-500 transition">
-                            <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                            <x-lucide-pencil class="w-3.5 h-3.5" />
                         </button>
                         <button wire:click="setConfirmDelete({{ $item->id }})"
                             class="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-red-500 transition">
-                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            <x-lucide-trash-2 class="w-3.5 h-3.5" />
                         </button>
                         @endif
                     </div>
@@ -307,14 +273,14 @@ $deleteItem = function ($id) {
                     @if($item->url)
                     <a href="{{ $item->url }}" target="_blank" rel="noopener"
                         class="w-full py-1.5 flex items-center justify-center gap-1.5 text-[11px] font-medium text-gray-600 hover:text-primary bg-gray-50 hover:bg-blue-50 rounded-lg transition">
-                        <i data-lucide="external-link" class="w-3.5 h-3.5"></i> Ver produto
+                        <x-lucide-external-link class="w-3.5 h-3.5" /> Ver produto
                     </a>
                     @endif
 
                     @if(!$isPurchased)
                     <button wire:click="openSim({{ $item->id }})"
                         class="w-full py-2 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-white bg-primary hover:bg-secondary rounded-lg transition">
-                        <i data-lucide="bar-chart-2" class="w-3.5 h-3.5"></i> Simular compra
+                        <x-lucide-bar-chart-2 class="w-3.5 h-3.5" /> Simular compra
                     </button>
                     @endif
 
@@ -322,7 +288,7 @@ $deleteItem = function ($id) {
                     <button wire:click="togglePurchased({{ $item->id }})"
                         class="w-full py-1.5 flex items-center justify-center gap-1.5 text-[11px] font-medium rounded-lg transition
                             {{ $isPurchased ? 'text-gray-500 hover:text-gray-700 bg-gray-50 hover:bg-gray-100' : 'text-green-700 hover:text-green-800 bg-green-50 hover:bg-green-100' }}">
-                        <i data-lucide="{{ $isPurchased ? 'rotate-ccw' : 'check-circle' }}" class="w-3.5 h-3.5"></i>
+                        <x-dynamic-component :component="'lucide-'.($isPurchased ? 'rotate-ccw' : 'check-circle')" class="w-3.5 h-3.5" />
                         {{ $isPurchased ? 'Desfazer' : 'Marcar como comprado' }}
                     </button>
                     @endif
@@ -331,7 +297,7 @@ $deleteItem = function ($id) {
         @empty
             <div class="col-span-full flex flex-col items-center justify-center py-12 text-gray-400 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
                 <div class="w-14 h-14 bg-white rounded-full flex items-center justify-center mb-3 shadow-sm">
-                    <i data-lucide="gift" class="w-7 h-7 opacity-40"></i>
+                    <x-lucide-gift class="w-7 h-7 opacity-40" />
                 </div>
                 <h3 class="font-semibold text-gray-600 text-sm">Lista vazia</h3>
                 <p class="text-xs mt-1 mb-4 text-gray-400">Adicione produtos que você quer comprar.</p>
@@ -347,14 +313,19 @@ $deleteItem = function ($id) {
     @if($showModal)
     <div class="fixed inset-0 z-50 flex sm:items-center sm:justify-center bg-gray-900/50 backdrop-blur-sm sm:p-4"
          wire:click="$set('showModal', false)">
-        <div class="bg-white w-full h-full sm:h-auto sm:max-w-sm sm:rounded-xl shadow-2xl sm:max-h-[90vh] overflow-y-auto flex flex-col" @click.stop>
-            <div class="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex justify-between items-center z-10">
-                <h3 class="text-base font-semibold text-gray-900">
-                    {{ $editId ? 'Editar desejo' : 'Novo desejo' }}
-                </h3>
-                <button wire:click="$set('showModal', false)" class="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
+        <div class="bg-white w-full h-full sm:h-auto sm:max-w-sm sm:rounded-xl shadow-2xl sm:max-h-[90vh] overflow-y-auto flex flex-col"
+             x-data="sheet(() => $wire.set('showModal', false))" :style="sheetStyle" @click.stop>
+            <div class="sticky top-0 bg-white z-10"
+                 x-on:touchstart.passive="start($event)" x-on:touchmove="move($event)" x-on:touchend="end()">
+                <div class="sm:hidden flex justify-center pt-2"><span class="w-10 h-1 bg-gray-300 rounded-full"></span></div>
+                <div class="border-b border-gray-100 px-4 py-3 flex justify-between items-center">
+                    <h3 class="text-base font-semibold text-gray-900">
+                        {{ $editId ? 'Editar desejo' : 'Novo desejo' }}
+                    </h3>
+                    <button wire:click="$set('showModal', false)" class="p-2.5 sm:p-1.5 -mr-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100" aria-label="Fechar">
+                        <x-lucide-x class="w-5 h-5" />
+                    </button>
+                </div>
             </div>
 
             <form wire:submit="save" class="p-4 space-y-3 flex-1">
@@ -367,15 +338,7 @@ $deleteItem = function ($id) {
                 </div>
 
                 {{-- Preço --}}
-                <div>
-                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Preço</label>
-                    <div class="relative">
-                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
-                        <input type="text" inputmode="decimal" wire:model="price" placeholder="0,00" required
-                            class="w-full pl-9 pr-3 py-2 text-lg font-bold rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
-                    </div>
-                    @error('price') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
-                </div>
+                <x-ui.currency-input model="price" label="Preço" required class="!text-lg !font-bold" />
 
                 {{-- Link --}}
                 <div>
@@ -444,19 +407,24 @@ $deleteItem = function ($id) {
 
     <div class="fixed inset-0 z-50 flex sm:items-end sm:justify-center bg-gray-900/60 backdrop-blur-sm sm:p-4"
          wire:click="$set('simItemId', null)">
-        <div class="bg-white w-full sm:max-w-md sm:rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto flex flex-col" @click.stop>
+        <div class="bg-white w-full sm:max-w-md sm:rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto flex flex-col"
+             x-data="sheet(() => $wire.set('simItemId', null))" :style="sheetStyle" @click.stop>
 
             {{-- Header --}}
-            <div class="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex justify-between items-center z-10">
-                <div>
-                    <h3 class="text-base font-semibold text-gray-900 flex items-center gap-1.5">
-                        <i data-lucide="bar-chart-2" class="w-4 h-4 text-primary"></i> Simular compra
-                    </h3>
-                    <p class="text-[11px] text-gray-500 mt-0.5 truncate max-w-[220px]">{{ $si->name }}</p>
+            <div class="sticky top-0 bg-white z-10"
+                 x-on:touchstart.passive="start($event)" x-on:touchmove="move($event)" x-on:touchend="end()">
+                <div class="sm:hidden flex justify-center pt-2"><span class="w-10 h-1 bg-gray-300 rounded-full"></span></div>
+                <div class="border-b border-gray-100 px-4 py-3 flex justify-between items-center">
+                    <div>
+                        <h3 class="text-base font-semibold text-gray-900 flex items-center gap-1.5">
+                            <x-lucide-bar-chart-2 class="w-4 h-4 text-primary" /> Simular compra
+                        </h3>
+                        <p class="text-[11px] text-gray-500 mt-0.5 truncate max-w-[220px]">{{ $si->name }}</p>
+                    </div>
+                    <button wire:click="$set('simItemId', null)" class="p-2.5 sm:p-1.5 -mr-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100" aria-label="Fechar">
+                        <x-lucide-x class="w-5 h-5" />
+                    </button>
                 </div>
-                <button wire:click="$set('simItemId', null)" class="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
             </div>
 
             <div class="p-4 space-y-4">
@@ -527,12 +495,12 @@ $deleteItem = function ($id) {
 
                     @if($siCanAv)
                     <div class="flex items-center gap-2 p-2.5 bg-green-50 rounded-lg border border-green-100">
-                        <i data-lucide="check-circle-2" class="w-4 h-4 text-green-600 flex-shrink-0"></i>
+                        <x-lucide-check-circle-2 class="w-4 h-4 text-green-600 flex-shrink-0" />
                         <span class="text-[11px] text-green-700 font-medium">Você consegue comprar à vista este mês!</span>
                     </div>
                     @else
                     <div class="flex items-start gap-2 p-2.5 bg-amber-50 rounded-lg border border-amber-100">
-                        <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5"></i>
+                        <x-lucide-alert-triangle class="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                         <div class="text-[11px] text-amber-800">
                             <strong>Saldo insuficiente.</strong>
                             Faltam R$ {{ number_format(abs($siAfterAv), 2, ',', '.') }} para comprar à vista.
@@ -609,12 +577,12 @@ $deleteItem = function ($id) {
 
                     @if($siCanPa)
                     <div class="flex items-center gap-2 p-2.5 bg-green-50 rounded-lg border border-green-100">
-                        <i data-lucide="check-circle-2" class="w-4 h-4 text-green-600 flex-shrink-0"></i>
+                        <x-lucide-check-circle-2 class="w-4 h-4 text-green-600 flex-shrink-0" />
                         <span class="text-[11px] text-green-700 font-medium">Parcela cabe no seu orçamento atual!</span>
                     </div>
                     @else
                     <div class="flex items-start gap-2 p-2.5 bg-amber-50 rounded-lg border border-amber-100">
-                        <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5"></i>
+                        <x-lucide-alert-triangle class="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                         <span class="text-[11px] text-amber-800">Parcela ultrapassa o saldo livre atual. Considere mais parcelas.</span>
                     </div>
                     @endif
@@ -630,7 +598,7 @@ $deleteItem = function ($id) {
 
                 {{-- Aviso --}}
                 <div class="flex items-start gap-2 p-2.5 bg-blue-50 rounded-lg border border-blue-100 text-[10px] text-blue-700">
-                    <i data-lucide="info" class="w-3.5 h-3.5 flex-shrink-0 mt-0.5"></i>
+                    <x-lucide-info class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                     <span>Ao confirmar, as parcelas serão lançadas em <strong>Transações</strong> e o item marcado como comprado.</span>
                 </div>
             </div>
@@ -643,7 +611,7 @@ $deleteItem = function ($id) {
                 </button>
                 <button wire:click="buyItem"
                     class="flex-1 py-2.5 text-sm font-semibold text-white bg-primary hover:bg-secondary rounded-lg transition flex items-center justify-center gap-1.5">
-                    <i data-lucide="shopping-cart" class="w-4 h-4"></i>
+                    <x-lucide-shopping-cart class="w-4 h-4" />
                     {{ $simPayment === 'avista' ? 'Lançar à vista' : "Lançar {$siInst}x" }}
                 </button>
             </div>
@@ -658,7 +626,7 @@ $deleteItem = function ($id) {
         <div class="bg-white rounded-xl shadow-xl p-5 w-full max-w-xs" @click.stop>
             <div class="text-center mb-4">
                 <div class="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <i data-lucide="trash-2" class="w-6 h-6"></i>
+                    <x-lucide-trash-2 class="w-6 h-6" />
                 </div>
                 <h3 class="text-sm font-bold text-gray-900">Remover da lista?</h3>
                 <p class="text-xs text-gray-500 mt-1">Esta ação não pode ser desfeita.</p>
