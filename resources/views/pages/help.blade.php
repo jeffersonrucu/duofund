@@ -366,8 +366,10 @@
                         <h3 class="font-bold text-gray-900">Corrigir ou encerrar um parcelamento</h3>
                         <p class="text-gray-600 text-sm">
                             No card de cada parcelamento use o lápis para editar descrição, valor da parcela, categoria,
-                            dia do vencimento e a <strong>quantidade de parcelas</strong>. Ao diminuir a quantidade, as últimas
-                            parcelas são excluídas; ao aumentar, novas parcelas são criadas nos meses seguintes.
+                            dia do vencimento, a <strong>quantidade de parcelas</strong> e quantas <strong>já foram pagas</strong>.
+                            Ao diminuir a quantidade, as últimas parcelas são excluídas; ao aumentar, novas parcelas são criadas
+                            nos meses seguintes. Corrigir as já pagas desloca o parcelamento: a parcela seguinte às pagas passa
+                            a vencer no mês que você está vendo.
                         </p>
                         <p class="text-gray-600 text-sm">
                             A lixeira remove o parcelamento inteiro ou apenas as parcelas do mês atual em diante — útil quando

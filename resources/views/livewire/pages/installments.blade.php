@@ -25,6 +25,7 @@ state([
     'editAmount'       => '',
     'editCategory'     => '',
     'editInstallments' => 1,
+    'editPaid'         => 0,
     'editDueDay'       => 1,
     'showDeleteModal'  => false,
     'deleteGroupId'    => null,
@@ -76,6 +77,9 @@ $editItems = computed(fn () => $this->groupItems($this->editGroupId));
 // Quantas parcelas serão criadas (positivo) ou removidas (negativo)
 $editDelta = computed(fn (): int => (int) $this->editInstallments - $this->editItems->count());
 
+$editCurrentNumber = computed(fn (): int =>
+    min((int) $this->editPaid, max(0, (int) $this->editInstallments - 1)) + 1);
+
 $openEdit = function (string $groupId) {
     $items = $this->groupItems($groupId);
     $first = $items->first();
@@ -85,19 +89,22 @@ $openEdit = function (string $groupId) {
         return;
     }
 
+    $monthStart = Carbon::parse($this->currentMonth)->startOfMonth();
+
     $this->resetErrorBag();
     $this->editGroupId      = $groupId;
     $this->editDescription  = preg_replace('/\s*\(\d+\/\d+\)$/', '', $first->description);
     $this->editAmount       = number_format((float) $first->amount, 2, ',', '.');
     $this->editCategory     = $first->category ?? '';
     $this->editInstallments = $items->count();
+    $this->editPaid         = $items->filter(fn ($tx) => $tx->date->lt($monthStart))->count();
     $this->editDueDay       = $first->date->day;
     $this->showEditModal    = true;
 };
 
 $closeEdit = function () {
     $this->reset(['showEditModal', 'editGroupId', 'editDescription', 'editAmount',
-                  'editCategory', 'editInstallments', 'editDueDay']);
+                  'editCategory', 'editInstallments', 'editPaid', 'editDueDay']);
     $this->resetErrorBag();
 };
 
@@ -109,6 +116,7 @@ $saveEdit = function () {
         'editAmount'       => 'required|numeric|min:0.01',
         'editCategory'     => 'nullable|string|max:255',
         'editInstallments' => 'required|integer|min:1|max:120',
+        'editPaid'         => 'required|integer|min:0|max:119',
         'editDueDay'       => 'required|integer|min:1|max:31',
     ]);
 
@@ -122,15 +130,20 @@ $saveEdit = function () {
         return;
     }
 
-    $count   = (int) $this->editInstallments;
-    $dueDay  = (int) $this->editDueDay;
+    $count  = (int) $this->editInstallments;
+    $dueDay = (int) $this->editDueDay;
+
+    // A parcela seguinte às já pagas é a que vence no mês em exibição
+    $paid       = max(0, min((int) $this->editPaid, $count - 1));
+    $startMonth = Carbon::parse($this->currentMonth)->startOfMonth()->subMonths($paid);
+
     $mirrors = app(TransactionMirrorService::class);
 
-    DB::transaction(function () use ($items, $first, $count, $dueDay, $user, $mirrors) {
+    DB::transaction(function () use ($items, $first, $count, $startMonth, $dueDay, $user, $mirrors) {
         // Encolher/crescer trabalha em série; a parcela avulsa ganha um grupo agora
         $groupId = $first->recurring_group_id ?: (string) Str::uuid();
 
-        $kept    = $items->take($count);
+        $kept    = $items->take($count)->values();
         $removed = $items->slice($count);
 
         if ($removed->isNotEmpty()) {
@@ -147,9 +160,9 @@ $saveEdit = function () {
             'category'    => $this->editCategory ?: 'Sem categoria',
         ];
 
-        foreach ($kept as $tx) {
+        foreach ($kept as $i => $tx) {
             $tx->update($fields + [
-                'date'               => $this->dueDate($tx->date, $dueDay),
+                'date'               => $this->dueDate($startMonth->copy()->addMonths($i), $dueDay),
                 'is_installment'     => true,
                 'recurring_group_id' => $groupId,
             ]);
@@ -157,17 +170,14 @@ $saveEdit = function () {
         }
 
         // Cresceu: continua mês a mês depois da última parcela
-        $cursor = $kept->last()->date->copy();
         for ($i = $kept->count(); $i < $count; $i++) {
-            $cursor = $cursor->copy()->startOfMonth()->addMonth();
-
             $newTx = Transaction::create($fields + [
                 'user_id'            => $first->user_id,
                 'type'               => $first->type,
                 'scope'              => $first->scope,
                 'payment_method'     => $first->payment_method,
                 'card_id'            => $first->card_id,
-                'date'               => $this->dueDate($cursor, $dueDay),
+                'date'               => $this->dueDate($startMonth->copy()->addMonths($i), $dueDay),
                 'is_installment'     => true,
                 'recurring_group_id' => $groupId,
             ]);
@@ -511,11 +521,29 @@ $summary = computed(function () {
                     @error('editCategory') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
                 </div>
 
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-medium text-gray-500 mb-1">Quantidade de parcelas</label>
+                        <input type="number" min="1" max="120" wire:model.live="editInstallments" required
+                            class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
+                        @error('editInstallments') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-medium text-gray-500 mb-1">Já pagas</label>
+                        <input type="number" min="0" max="119" wire:model.live="editPaid" required
+                            class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
+                        @error('editPaid') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                    </div>
+                </div>
+
                 <div>
-                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Quantidade de parcelas</label>
-                    <input type="number" min="1" max="120" wire:model.live="editInstallments" required
-                        class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
-                    @error('editInstallments') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                    <p class="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                        Em <span class="capitalize font-medium">{{ \Carbon\Carbon::parse($currentMonth)->locale('pt_BR')->translatedFormat('F/Y') }}</span>
+                        vence a parcela
+                        <strong class="text-gray-900">{{ $this->editCurrentNumber }}/{{ (int) $editInstallments }}</strong>.
+                        As anteriores contam como pagas.
+                    </p>
 
                     @if($this->editDelta < 0)
                         <p class="text-[10px] text-red-600 mt-1.5 flex items-start gap-1">

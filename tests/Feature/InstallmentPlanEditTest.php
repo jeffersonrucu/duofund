@@ -5,11 +5,11 @@ use App\Models\User;
 use Illuminate\Support\Str;
 use Livewire\Volt\Volt;
 
-/** Cria um parcelamento mensal começando no mês atual. */
-function criaParcelamento(User $user, int $count, float $amount = 100): string
+/** Cria um parcelamento mensal; $offset desloca o mês da 1ª parcela. */
+function criaParcelamento(User $user, int $count, float $amount = 100, int $offset = 0): string
 {
     $groupId = (string) Str::uuid();
-    $start   = now()->startOfMonth()->addDays(4);
+    $start   = now()->startOfMonth()->addMonths($offset)->addDays(4);
 
     for ($i = 0; $i < $count; $i++) {
         Transaction::create([
@@ -48,8 +48,54 @@ it('abre a edição com os dados do parcelamento', function () {
         ->assertSet('editDescription', 'Sofá')
         ->assertSet('editCategory', 'Casa')
         ->assertSet('editDueDay', 5)
+        ->assertSet('editPaid', 0)
         ->assertSee('Editar parcelamento')
         ->assertSee('Quantidade de parcelas');
+});
+
+it('preenche as parcelas já pagas pelo mês em exibição', function () {
+    $user = User::factory()->create();
+    $group = criaParcelamento($user, 6, 100, -2);
+    $this->actingAs($user);
+
+    paginaParcelas()
+        ->call('openEdit', $group)
+        ->assertSet('editPaid', 2);
+});
+
+it('desloca a série ao corrigir quantas parcelas já foram pagas', function () {
+    $user = User::factory()->create();
+    $group = criaParcelamento($user, 6);
+    $this->actingAs($user);
+
+    paginaParcelas()
+        ->call('openEdit', $group)
+        ->set('editPaid', 3)
+        ->call('saveEdit');
+
+    $items = Transaction::where('recurring_group_id', $group)->orderBy('date')->get();
+    $mesAtual = $items->first(fn ($tx) => $tx->date->isSameMonth(now()));
+
+    expect($items)->toHaveCount(6);
+    expect($items->first()->date->format('Y-m'))->toBe(now()->subMonths(3)->format('Y-m'));
+    expect($mesAtual->installment_current)->toBe(4);
+});
+
+it('limita as parcelas pagas à quantidade do parcelamento', function () {
+    $user = User::factory()->create();
+    $group = criaParcelamento($user, 4);
+    $this->actingAs($user);
+
+    paginaParcelas()
+        ->call('openEdit', $group)
+        ->set('editPaid', 10)
+        ->call('saveEdit');
+
+    $items = Transaction::where('recurring_group_id', $group)->orderBy('date')->get();
+
+    // A última parcela é a do mês em exibição; as 3 anteriores ficam no passado
+    expect($items->last()->date->format('Y-m'))->toBe(now()->format('Y-m'));
+    expect($items->last()->installment_current)->toBe(4);
 });
 
 it('diminui a quantidade removendo as últimas parcelas', function () {
