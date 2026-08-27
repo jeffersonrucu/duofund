@@ -2,8 +2,13 @@
 use function Livewire\Volt\{state, computed, layout, uses};
 use App\Livewire\Concerns\HasMonthNavigation;
 use App\Livewire\Concerns\HasScopeToggle;
+use App\Models\Category;
 use App\Models\Transaction;
+use App\Services\TransactionMirrorService;
+use App\Support\Money;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 layout('components.layouts.app');
 uses([HasMonthNavigation::class, HasScopeToggle::class]);
@@ -13,6 +18,210 @@ state([
     'currentMonth' => session('current_month', now()->startOfMonth()->format('Y-m-d')),
 ]);
 
+state([
+    'showEditModal'    => false,
+    'editGroupId'      => null,
+    'editDescription'  => '',
+    'editAmount'       => '',
+    'editCategory'     => '',
+    'editInstallments' => 1,
+    'editDueDay'       => 1,
+    'showDeleteModal'  => false,
+    'deleteGroupId'    => null,
+]);
+
+/** Parcelas de um parcelamento; 'solo_<id>' é a parcela sem série. */
+$groupItems = function (?string $groupId) {
+    if (! $groupId) {
+        return collect();
+    }
+
+    $query = Transaction::forView(auth()->user(), $this->view)
+        ->where('is_installment', true)
+        ->where('is_recurring', false);
+
+    if (str_starts_with($groupId, 'solo_')) {
+        $query->whereKey((int) substr($groupId, 5));
+    } else {
+        $query->where('recurring_group_id', $groupId);
+    }
+
+    return $query->orderBy('date')->orderBy('id')->get();
+};
+
+// Mantém o dia dentro do mês (dia 31 em fevereiro vira o último dia)
+$dueDate = fn (Carbon $month, int $day): string =>
+    $month->copy()->day(min($day, $month->daysInMonth))->toDateString();
+
+/** installment_count/current precisam refletir as parcelas que de fato existem. */
+$renumber = function (string $groupId, array $familyUserIds): void {
+    $items = Transaction::whereIn('user_id', $familyUserIds)
+        ->where('recurring_group_id', $groupId)
+        ->orderBy('date')->orderBy('id')->get();
+
+    $number = 1;
+    foreach ($items as $tx) {
+        $tx->update([
+            'installment_current' => $number++,
+            'installment_count'   => $items->count(),
+        ]);
+    }
+};
+
+$categoriesList = computed(fn () => Category::forView(auth()->user(), $this->view)
+    ->orderBy('name')->pluck('name'));
+
+$editItems = computed(fn () => $this->groupItems($this->editGroupId));
+
+// Quantas parcelas serão criadas (positivo) ou removidas (negativo)
+$editDelta = computed(fn (): int => (int) $this->editInstallments - $this->editItems->count());
+
+$openEdit = function (string $groupId) {
+    $items = $this->groupItems($groupId);
+    $first = $items->first();
+
+    if (! $first || ! $first->manageableBy(auth()->user())) {
+        $this->dispatch('notify', 'Parcelamento não encontrado.');
+        return;
+    }
+
+    $this->resetErrorBag();
+    $this->editGroupId      = $groupId;
+    $this->editDescription  = preg_replace('/\s*\(\d+\/\d+\)$/', '', $first->description);
+    $this->editAmount       = number_format((float) $first->amount, 2, ',', '.');
+    $this->editCategory     = $first->category ?? '';
+    $this->editInstallments = $items->count();
+    $this->editDueDay       = $first->date->day;
+    $this->showEditModal    = true;
+};
+
+$closeEdit = function () {
+    $this->reset(['showEditModal', 'editGroupId', 'editDescription', 'editAmount',
+                  'editCategory', 'editInstallments', 'editDueDay']);
+    $this->resetErrorBag();
+};
+
+$saveEdit = function () {
+    $this->editAmount = Money::toDecimal($this->editAmount) ?? '';
+
+    $this->validate([
+        'editDescription'  => 'required|string|max:255',
+        'editAmount'       => 'required|numeric|min:0.01',
+        'editCategory'     => 'nullable|string|max:255',
+        'editInstallments' => 'required|integer|min:1|max:120',
+        'editDueDay'       => 'required|integer|min:1|max:31',
+    ]);
+
+    $user  = auth()->user();
+    $items = $this->groupItems($this->editGroupId);
+    $first = $items->first();
+
+    if (! $first || ! $first->manageableBy($user)) {
+        $this->dispatch('notify', 'Parcelamento não encontrado.');
+        $this->closeEdit();
+        return;
+    }
+
+    $count   = (int) $this->editInstallments;
+    $dueDay  = (int) $this->editDueDay;
+    $mirrors = app(TransactionMirrorService::class);
+
+    DB::transaction(function () use ($items, $first, $count, $dueDay, $user, $mirrors) {
+        // Encolher/crescer trabalha em série; a parcela avulsa ganha um grupo agora
+        $groupId = $first->recurring_group_id ?: (string) Str::uuid();
+
+        $kept    = $items->take($count);
+        $removed = $items->slice($count);
+
+        if ($removed->isNotEmpty()) {
+            $mirrors->deleteSeries(
+                $groupId,
+                $user->getFamilyUserIds(),
+                $removed->first()->date->toDateString()
+            );
+        }
+
+        $fields = [
+            'description' => $this->editDescription,
+            'amount'      => $this->editAmount,
+            'category'    => $this->editCategory ?: 'Sem categoria',
+        ];
+
+        foreach ($kept as $tx) {
+            $tx->update($fields + [
+                'date'               => $this->dueDate($tx->date, $dueDay),
+                'is_installment'     => true,
+                'recurring_group_id' => $groupId,
+            ]);
+            $mirrors->reconcile($tx);
+        }
+
+        // Cresceu: continua mês a mês depois da última parcela
+        $cursor = $kept->last()->date->copy();
+        for ($i = $kept->count(); $i < $count; $i++) {
+            $cursor = $cursor->copy()->startOfMonth()->addMonth();
+
+            $newTx = Transaction::create($fields + [
+                'user_id'            => $first->user_id,
+                'type'               => $first->type,
+                'scope'              => $first->scope,
+                'payment_method'     => $first->payment_method,
+                'card_id'            => $first->card_id,
+                'date'               => $this->dueDate($cursor, $dueDay),
+                'is_installment'     => true,
+                'recurring_group_id' => $groupId,
+            ]);
+            $mirrors->createFor($newTx);
+        }
+
+        $this->renumber($groupId, $user->getFamilyUserIds());
+    });
+
+    $this->closeEdit();
+    $this->dispatch('notify', 'Parcelamento atualizado!');
+};
+
+$confirmDelete = function (string $groupId) {
+    $first = $this->groupItems($groupId)->first();
+
+    if (! $first || ! $first->manageableBy(auth()->user())) {
+        $this->dispatch('notify', 'Parcelamento não encontrado.');
+        return;
+    }
+
+    $this->deleteGroupId   = $groupId;
+    $this->showDeleteModal = true;
+};
+
+$deletePlan = function (string $mode = 'all') {
+    $user  = auth()->user();
+    $first = $this->groupItems($this->deleteGroupId)->first();
+
+    if (! $first || ! $first->manageableBy($user)) {
+        $this->reset(['showDeleteModal', 'deleteGroupId']);
+        return;
+    }
+
+    $groupId    = $first->recurring_group_id;
+    $isForward  = $mode === 'forward';
+    $monthStart = Carbon::parse($this->currentMonth)->startOfMonth()->toDateString();
+
+    if (! $groupId) {
+        $first->delete();
+    } else {
+        DB::transaction(function () use ($groupId, $isForward, $monthStart, $user) {
+            app(TransactionMirrorService::class)
+                ->deleteSeries($groupId, $user->getFamilyUserIds(), $isForward ? $monthStart : null);
+
+            $this->renumber($groupId, $user->getFamilyUserIds());
+        });
+    }
+
+    $this->reset(['showDeleteModal', 'deleteGroupId']);
+    $this->dispatch('notify', $isForward
+        ? 'Parcelas removidas deste mês em diante.'
+        : 'Parcelamento removido.');
+};
 
 $monthGroups = computed(function () {
     $user         = auth()->user();
@@ -166,7 +375,7 @@ $summary = computed(function () {
     {{-- INSTALLMENT CARDS --}}
     <div class="space-y-3">
         @forelse($this->monthGroups as $group)
-        <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden" wire:key="plan-{{ $group['group_id'] }}">
             <div class="p-4">
                 {{-- Top row --}}
                 <div class="flex items-start justify-between mb-3">
@@ -187,6 +396,18 @@ $summary = computed(function () {
                     <div class="text-right flex-shrink-0">
                         <p class="text-base font-black text-gray-900">R$ {{ number_format($group['amount_per'], 2, ',', '.') }}</p>
                         <p class="text-[10px] text-gray-400">esta parcela</p>
+                        <div class="flex items-center justify-end gap-1 mt-1.5 -mr-1.5">
+                            <button wire:click="openEdit('{{ $group['group_id'] }}')"
+                                class="w-10 h-10 sm:w-9 sm:h-9 flex items-center justify-center text-blue-500 hover:bg-blue-50 rounded-lg transition"
+                                aria-label="Editar parcelamento" title="Editar parcelamento">
+                                <x-lucide-pencil class="w-4 h-4" />
+                            </button>
+                            <button wire:click="confirmDelete('{{ $group['group_id'] }}')"
+                                class="w-10 h-10 sm:w-9 sm:h-9 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg transition"
+                                aria-label="Excluir parcelamento" title="Excluir parcelamento">
+                                <x-lucide-trash-2 class="w-4 h-4" />
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -244,4 +465,122 @@ $summary = computed(function () {
         </div>
         @endforelse
     </div>
+
+    {{-- MODAL DE EDIÇÃO DO PARCELAMENTO --}}
+    @if($showEditModal)
+    <div class="fixed inset-0 z-[60] flex sm:items-center sm:justify-center bg-gray-900/50 backdrop-blur-sm" wire:click="closeEdit">
+        <div class="bg-white w-full h-full sm:h-auto sm:max-w-md sm:rounded-xl shadow-xl flex flex-col sm:max-h-[90vh] overflow-y-auto" @click.stop>
+            <div class="sticky top-0 bg-white z-10 border-b border-gray-100 px-4 py-3 flex justify-between items-center">
+                <h3 class="text-base font-semibold text-gray-900">Editar parcelamento</h3>
+                <button wire:click="closeEdit" class="p-2.5 sm:p-1.5 -mr-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100" aria-label="Fechar">
+                    <x-lucide-x class="w-5 h-5" />
+                </button>
+            </div>
+
+            <form wire:submit="saveEdit" class="p-4 space-y-3">
+                <div>
+                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Descrição</label>
+                    <input type="text" wire:model="editDescription" required
+                        class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
+                    @error('editDescription') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <x-ui.currency-input model="editAmount" label="Valor da parcela" required class="!font-bold" />
+
+                    <div>
+                        <label class="block text-[11px] font-medium text-gray-500 mb-1">Dia do vencimento</label>
+                        <input type="number" min="1" max="31" wire:model="editDueDay" required
+                            class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
+                        @error('editDueDay') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Categoria</label>
+                    <select wire:model="editCategory"
+                        class="w-full px-3 py-2.5 text-sm rounded-lg border border-gray-200 bg-white focus:ring-1 focus:ring-primary/30 focus:border-primary">
+                        <option value="">Sem categoria</option>
+                        @foreach($this->categoriesList as $c)
+                            <option value="{{ $c }}">{{ $c }}</option>
+                        @endforeach
+                        @if($editCategory && ! $this->categoriesList->contains($editCategory))
+                            <option value="{{ $editCategory }}">{{ $editCategory }}</option>
+                        @endif
+                    </select>
+                    @error('editCategory') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Quantidade de parcelas</label>
+                    <input type="number" min="1" max="120" wire:model.live="editInstallments" required
+                        class="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:ring-1 focus:ring-primary/30 focus:border-primary">
+                    @error('editInstallments') <span class="text-red-500 text-[10px]">{{ $message }}</span> @enderror
+
+                    @if($this->editDelta < 0)
+                        <p class="text-[10px] text-red-600 mt-1.5 flex items-start gap-1">
+                            <x-lucide-alert-triangle class="w-3 h-3 flex-shrink-0 mt-px" />
+                            <span>As <strong>{{ abs($this->editDelta) }}</strong> últimas parcelas serão excluídas.</span>
+                        </p>
+                    @elseif($this->editDelta > 0)
+                        <p class="text-[10px] text-amber-600 mt-1.5 flex items-start gap-1">
+                            <x-lucide-plus class="w-3 h-3 flex-shrink-0 mt-px" />
+                            <span><strong>{{ $this->editDelta }}</strong> {{ $this->editDelta === 1 ? 'nova parcela' : 'novas parcelas' }} nos meses seguintes.</span>
+                        </p>
+                    @endif
+
+                    <p class="text-[10px] text-gray-400 mt-1.5 flex items-start gap-1">
+                        <x-lucide-info class="w-3 h-3 flex-shrink-0 mt-px" />
+                        <span>Descrição, valor, categoria e vencimento valem para todas as parcelas.</span>
+                    </p>
+                </div>
+
+                <div class="flex gap-2 pt-1">
+                    <button type="button" wire:click="closeEdit"
+                        class="flex-1 py-2.5 text-sm bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" wire:loading.attr="disabled"
+                        class="flex-1 py-2.5 text-sm bg-primary text-white rounded-lg font-semibold hover:bg-secondary transition disabled:opacity-50">
+                        <span wire:loading.remove wire:target="saveEdit">Salvar</span>
+                        <span wire:loading wire:target="saveEdit">Salvando...</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    @endif
+
+    {{-- MODAL DE EXCLUSÃO DO PARCELAMENTO --}}
+    @if($showDeleteModal)
+    <div class="fixed inset-0 z-[60] flex sm:items-center sm:justify-center bg-gray-900/50 backdrop-blur-sm" wire:click="$set('showDeleteModal', false)">
+        <div class="bg-white w-full h-full sm:h-auto sm:max-w-sm sm:rounded-xl shadow-xl flex flex-col" @click.stop>
+            <div class="flex-1 flex flex-col items-center justify-center p-6 text-center">
+                <div class="bg-red-100 text-red-600 w-12 h-12 rounded-full flex items-center justify-center mb-3">
+                    <x-lucide-credit-card class="w-6 h-6" />
+                </div>
+                <h3 class="text-base font-bold text-gray-900">Excluir parcelamento</h3>
+                <p class="text-sm text-gray-500 mt-2">
+                    Remover todas as parcelas ou só as deste mês em diante?
+                </p>
+            </div>
+
+            <div class="p-4 border-t border-gray-100 space-y-2">
+                <button wire:click="deletePlan('forward')"
+                    class="w-full py-2.5 text-sm bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition flex items-center justify-center">
+                    <x-lucide-calendar-clock class="w-4 h-4 mr-2 text-gray-400" /> Deste mês em diante
+                </button>
+
+                <button wire:click="deletePlan('all')"
+                    class="w-full py-2.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold transition flex items-center justify-center">
+                    <x-lucide-trash-2 class="w-4 h-4 mr-2" /> Todas as parcelas
+                </button>
+
+                <button wire:click="$set('showDeleteModal', false)" class="w-full py-2 text-xs text-gray-400 hover:text-gray-600">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+    @endif
 </div>

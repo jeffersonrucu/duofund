@@ -359,6 +359,21 @@
                             </p>
                         </div>
                     </div>
+
+                    <hr class="border-gray-100">
+
+                    <div class="space-y-3">
+                        <h3 class="font-bold text-gray-900">Corrigir ou encerrar um parcelamento</h3>
+                        <p class="text-gray-600 text-sm">
+                            No card de cada parcelamento use o lápis para editar descrição, valor da parcela, categoria,
+                            dia do vencimento e a <strong>quantidade de parcelas</strong>. Ao diminuir a quantidade, as últimas
+                            parcelas são excluídas; ao aumentar, novas parcelas são criadas nos meses seguintes.
+                        </p>
+                        <p class="text-gray-600 text-sm">
+                            A lixeira remove o parcelamento inteiro ou apenas as parcelas do mês atual em diante — útil quando
+                            você quitou a dívida antes do prazo.
+                        </p>
+                    </div>
                 </div>
             </div>
             </div>
